@@ -15,3 +15,6 @@ mongo = PyMongo(app)
 
 def index():
     return '<h1> Heroku Working </h1>'
+
+if __name__ == "__main__":
+	app.run()
