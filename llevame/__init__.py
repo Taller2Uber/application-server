@@ -13,8 +13,9 @@ app = Flask(__name__)
 app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
+@app.route('/')
 def index():
     return '<h1> Heroku Working </h1>'
 
 if __name__ == "__main__":
-	app.run()
+    app.run()
