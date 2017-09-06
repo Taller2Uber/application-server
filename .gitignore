@@ -1,1 +1,8 @@
+.env
+.flaskenv
+*.pyc
+*.pyo
 env
+env*
+llevame/lib
+llevame/tests
