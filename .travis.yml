@@ -7,4 +7,4 @@ install:
   - pip install -r requirements.txt
 
 script: 
-  - pytest llevame/test/tests.py
+  - pytest llevame/tests/tests.py
