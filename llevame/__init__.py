@@ -15,7 +15,7 @@ mongo = PyMongo(app)
 
 @app.route('/')
 def index():
-    return '<h1> Heroku Working </h1>'
+    return '<h1> All Working </h1>'
 
 if __name__ == "__main__":
     app.run()
