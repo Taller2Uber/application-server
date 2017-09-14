@@ -3,15 +3,19 @@ from flask import Flask, jsonify
 import flask_restful
 from flask_pymongo import PyMongo
 from flask import make_response
+import logging
 
-
-MONGO_URL = os.environ.get('MONGO_URL')
-if not MONGO_URL:
-    MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame";
+logging.basicConfig(filename='example.log',level=logging.ERROR,format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
 app = Flask(__name__)
 
-app.config['MONGO_URI'] = MONGO_URL
+MONGO_URL = os.environ.get('MONGO_URL')
+#if not MONGO_URL:
+#    MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame";
+
+
+logging.error('using mongo cofiguration on init: %s', MONGO_URL)
+#app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
 @app.route('/')
