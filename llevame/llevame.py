@@ -5,32 +5,37 @@ app = Flask(__name__)
 
 @app.route("/api/user/create", methods=['POST'])
 def createUser():
-    """Creacion de usuarios. El usuario se loguea con fb en la app mobile, y recibimos el token de fb como parametro y los datos en el body.
+    """Creacion de usuarios.
+
+    .. :quickref: El usuario se loguea con fb en la app mobile, y recibimos el token de fb como parametro y los datos en el body.
+
     **Example request**:
+
     .. sourcecode:: http
+
       POST /api/user/create HTTP/1.1
+      Host: http://localhost:5000/api/user/create
       Accept: application/json
-      Content-Type: application/json
-      {
-        "token" : "{token}",
-        "isDriver" : true
-      }
+
     **Example response**:
+
     .. sourcecode:: http
-      HTTP/1.1 200 OK
+
+      HTTP/1.1 201 CREATED
       Vary: Accept
+
       Content-Type: application/json
       {
-        'name': 'Agustin',
-        'surname': 'Perrotta',
+        'nombre': 'Agustin',
+        'apellido': 'Perrotta',
         'email': 'aperrotta@gmail.com', 
         'fbAccount': 'test',
-        'gmail' : 'suga92@gmail.com',
-        'isDriver': true
+        'gmail' : 'suga92@gmail.com'
       }
+
     :resheader Content-Type: application/json
-    :statuscode 200: Usuario creado con exito
-    :statuscode 500: Error en la creacion de usuario
+    :status 201: user created succesfully
+    :returns: :class:`myapp.objects.user`
     """
     user = {
         'userId': {userId},
@@ -47,8 +52,11 @@ def createUser():
 @app.route("/api/user/login", methods=['POST'])
 def loginUser():
     """Logueo de usuarios. El usuario se loguea con fb en la app mobile, y recibimos el token de fb y mail para matchear con el usuario en la base de datos.
+    
     **Example request**:
+    
     .. sourcecode:: http
+    
       POST /api/user/login HTTP/1.1
       Accept: application/json
       Content-Type: application/json
@@ -56,10 +64,14 @@ def loginUser():
         "email":"aperrotta@gmail.com",
         "token" : "{token}"
       }
+    
     **Example response**:
+    
     .. sourcecode:: http
+    
       HTTP/1.1 200 OK
       Vary: Accept
+
       Content-Type: application/json
       {
         'userId': {userId},
@@ -70,6 +82,7 @@ def loginUser():
         'gmail' : 'suga92@gmail.com',
         'isDriver': true
       }
+    
     :resheader Content-Type: application/json
     :statuscode 200: Logueo exitoso
     :statuscode 401: Acceso denegado
@@ -89,8 +102,11 @@ def loginUser():
 @app.route("/api/user/update", methods=['PUT'])
 def updateUser():
     """Actualizacion de usuarios. El usuario se loguea con fb en la app mobile, y recibimos el token de fb, mail y campos a actualizar
+    
     **Example request**:
+    
     .. sourcecode:: http
+    
       PUT /api/user/update HTTP/1.1
       Accept: application/json
       Content-Type: application/json
@@ -99,10 +115,14 @@ def updateUser():
         "token" : "{token}",
         "isDriver" : false
       }
+    
     **Example response**:
+    
     .. sourcecode:: http
+    
       HTTP/1.1 200 OK
       Vary: Accept
+
       Content-Type: application/json
       {
         'userId': {userId},
@@ -113,6 +133,7 @@ def updateUser():
         'gmail' : 'suga92@gmail.com',
         'isDriver': false
       }
+    
     :resheader Content-Type: application/json
     :statuscode 200: Usuario actualizado con exito
     :statuscode 500: Error actualizando usuario
@@ -133,8 +154,11 @@ def updateUser():
 @app.route("/api/route/options", methods=['POST'])
 def calculateRoutesOptions():
     """Obtencion de posibles caminos para llegar de punto A a punto B del mapa.
+    
     **Example request**:
+    
     .. sourcecode:: http
+    
       POST /api/routes/options HTTP/1.1
       Accept: application/json
       Content-Type: application/json
@@ -148,14 +172,19 @@ def calculateRoutesOptions():
           "long" : -58.488967
         }
       }
+    
     **Example response**:
+    
     .. sourcecode:: http
+    
       HTTP/1.1 200 OK
       Vary: Accept
+
       Content-Type: application/json
       {
         "routes" : [{},{},{}]
       }
+    
     :resheader Content-Type: application/json
     :statuscode 200: Rutas calculadas correctamente
     :statuscode 500: Error calculando rutas
@@ -166,11 +195,14 @@ def calculateRoutesOptions():
 
     return jsonify(options), 200
 
-@app.route("/api/route/confirm", methods=['POST'])
-def confirmRoute():
+@app.route("/api/route/user/confirm", methods=['POST'])
+def confirmUserRoute():
     """Confirmacion de camino elegido para llegar de punto A a punto B del mapa.
+    
     **Example request**:
+    
     .. sourcecode:: http
+    
       POST /api/route/confirm HTTP/1.1
       Accept: application/json
       Content-Type: application/json
@@ -178,8 +210,11 @@ def confirmRoute():
         'userId' : {userId},
         'route' : {}
       }
+    
     **Example response**:
+    
     .. sourcecode:: http
+    
       HTTP/1.1 200 OK
       Vary: Accept
       
@@ -192,8 +227,11 @@ def confirmRoute():
 @app.route("/api/drivers/available", methods=['POST'])
 def indexAvailableDrivers():
     """Choferes disponibles cerca mio
+    
     **Example request**:
+    
     .. sourcecode:: http
+    
       POST /api/drivers/available HTTP/1.1
       Accept: application/json
       Content-Type: application/json
@@ -203,10 +241,14 @@ def indexAvailableDrivers():
           "long" : -58.420596
         }
       }
+    
     **Example response**:
+    
     .. sourcecode:: http
+    
       HTTP/1.1 200 OK
       Vary: Accept
+
       Content-Type: application/json
       {
         "drivers" : [{
@@ -226,6 +268,7 @@ def indexAvailableDrivers():
                         "long" : -58.405789
                       }}]
       }
+    
     :resheader Content-Type: application/json
     :statuscode 200: Choferes obtenidos correctamente
     :statuscode 500: Error obteniendo choferes
@@ -247,15 +290,18 @@ def indexAvailableDrivers():
                         "lat" : -33.365984, 
                         "long" : -58.405789
                       }}]
-      }
+    }
 
     return jsonify(drivers), 200
 
 @app.route("/api/routes/available", methods=['POST'])
 def indexAvailableConfirmedRoutes():
     """Choferes cerca mio
+    
     **Example request**:
+    
     .. sourcecode:: http
+    
       POST /api/route/available HTTP/1.1
       Accept: application/json
       Content-Type: application/json
@@ -265,10 +311,14 @@ def indexAvailableConfirmedRoutes():
           "long" : -58.420596
         }
       }
+    
     **Example response**:
+    
     .. sourcecode:: http
+    
       HTTP/1.1 200 OK
       Vary: Accept
+
       Content-Type: application/json
       {
         "confirmedRoutes" : [{
@@ -282,6 +332,7 @@ def indexAvailableConfirmedRoutes():
             'route' : {}
           }]
       }
+    
     :resheader Content-Type: application/json
     :statuscode 200: Recorridos confirmados obtenidos correctamente
     :statuscode 500: Error obteniendo recorridos confirmados
@@ -297,15 +348,18 @@ def indexAvailableConfirmedRoutes():
             'surname': 'Caldora',
             'route' : {}
           }]
-      }
+    }
 
     return jsonify(confirmedRoutes), 200
 
-@app.route("/api/route/confirm", methods=['POST'])
-def confirmRoute():
+@app.route("/api/route/driver/confirm", methods=['POST'])
+def confirmDriverRoute():
     """Chofer confirma el viaje
+    
     **Example request**:
+    
     .. sourcecode:: http
+    
       POST /api/route/confirm HTTP/1.1
       Accept: application/json
       Content-Type: application/json
@@ -313,8 +367,11 @@ def confirmRoute():
         'routeId' : {routeId},
         'driverId' : {driverId}
       }
+    
     **Example response**:
+    
     .. sourcecode:: http
+    
       HTTP/1.1 200 OK
       Vary: Accept
       
@@ -327,16 +384,22 @@ def confirmRoute():
 @app.route("/api/route/start", methods=['POST'])
 def startRoute():
     """Chofer comienza el viaje
+    
     **Example request**:
+    
     .. sourcecode:: http
+    
       POST /api/route/start HTTP/1.1
       Accept: application/json
       Content-Type: application/json
       {
         'userId' : {userId}
       }
+    
     **Example response**:
+    
     .. sourcecode:: http
+    
       HTTP/1.1 200 OK
       Vary: Accept
       
@@ -349,8 +412,11 @@ def startRoute():
 @app.route("/api/user/position", methods=['PUT'])
 def updateUserPosition():
     """Actualizo posicion actual de usuario
+    
     **Example request**:
+    
     .. sourcecode:: http
+    
       PUT /api/user/position HTTP/1.1
       Accept: application/json
       Content-Type: application/json
@@ -361,10 +427,16 @@ def updateUserPosition():
           "long" : -58.420596
         }
       }
+    
     **Example response**:
+    
     .. sourcecode:: http
+    
       HTTP/1.1 200 OK
       Vary: Accept
+
+    .. sourcecode:: json
+
       Content-Type: application/json
       { 
         'userId' :  {userId}
@@ -373,6 +445,7 @@ def updateUserPosition():
           "long" : -58.420596
         }
       }
+    
     :resheader Content-Type: application/json
     :statuscode 200: Ubicacion actualizada correctamente
     :statuscode 500: Error actualizando ubicacion
@@ -383,6 +456,6 @@ def updateUserPosition():
           "lat" : -34.588412, 
           "long" : -58.420596
         }
-      }
+    }
 
     return jsonify(user), 200
