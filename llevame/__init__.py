@@ -10,12 +10,12 @@ logging.basicConfig(filename='example.log',level=logging.ERROR,format='%(asctime
 app = Flask(__name__)
 
 MONGO_URL = os.environ.get('MONGO_URL')
-#if not MONGO_URL:
-#    MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame";
+if not MONGO_URL:
+    MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame";
 
 
 logging.error('using mongo cofiguration on init: %s', MONGO_URL)
-#app.config['MONGO_URI'] = MONGO_URL
+app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
 @app.route('/')
