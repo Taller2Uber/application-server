@@ -2,7 +2,6 @@ from flask import Flask, jsonify
 
 app = Flask(__name__)
 
-
 @app.route("/api/user/create", methods=['POST'])
 def createUser():
     """Creacion de usuarios.
