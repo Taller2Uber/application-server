@@ -20,6 +20,7 @@ py==1.4.34
 Pygments==2.2.0
 pymongo==3.5.1
 pytest==3.2.1
+pytest-cov==2.5.1
 python-dateutil==2.6.1
 pytz==2017.2
 requests==2.18.4
@@ -27,6 +28,7 @@ six==1.10.0
 snowballstemmer==1.2.1
 Sphinx==1.6.3
 sphinxcontrib-websupport==1.0.1
+travis==0.0.3
 typing==3.6.2
 urllib3==1.22
 Werkzeug==0.12.2
