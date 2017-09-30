@@ -5,22 +5,30 @@ from flask_pymongo import PyMongo
 from flask import make_response
 import logging
 
+from User import User
+
+
+
 logging.basicConfig(filename='example.log',level=logging.ERROR,format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
 app = Flask(__name__)
 
-#MONGO_URL = os.environ.get('MONGO_URL')
-#if not MONGO_URL:
-#    MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame";
+MONGO_URL = os.environ.get('MONGO_URL')
+if not MONGO_URL:
+   MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame";
+
+logging.error('using mongo cofiguration on init: %s', MONGO_URL)
+app.config['MONGO_URI'] = MONGO_URL
+mongo = PyMongo(app)
 
 
-#logging.error('using mongo cofiguration on init: %s', MONGO_URL)
-#app.config['MONGO_URI'] = MONGO_URL
-#mongo = PyMongo(app)
-
-@app.route('/')
+@app.route('/api/user/add')
 def index():
-    return '<h1> Taller 2 </h1>'
+    user = User("Peter","peter@gmail.com")
+    users = mongo.db.users
+    users.insert({"name": "Jose", "email": "jose@pelotas.com"})
+    return "Added user"
+
 
 @app.route("/api/user/create", methods=['POST'])
 def createUser():
