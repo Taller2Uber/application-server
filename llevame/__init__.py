@@ -1,6 +1,7 @@
 import os
 import requests
 from flask import Flask, jsonify, request, json
+from bson import ObjectId
 from flask_pymongo import PyMongo
 import logging
 
@@ -17,6 +18,11 @@ logging.error('using mongo cofiguration on init: %s', MONGO_URL)
 app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, ObjectId):
+            return str(o)
+        return json.JSONEncoder.default(self, o)
 
 @app.route('/index')
 def index():
@@ -68,14 +74,20 @@ def register():
     if not fb_token:
         return 'Token not found', 400
     # Request a facebook
-    fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,picture').content
+    fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,gender').content
     fb_body = json.loads(fb_response)
     if 'error' not in fb_response:
         users = mongo.db.users
         user = users.find_one({ 'user_id' : fb_body['id']})
         if not user:
-            users.insert({ 'user_id': fb_body['id'], 'name': fb_body['name']})
-            return 'Successfully created user', 200
+            user_to_create = { 'user_id': fb_body['id'],
+                           'name': fb_body['name'],
+                           'gender': fb_body['gender'],
+                           'latitude': str_body['lat'],
+                           'longitude': str_body['long'],
+                           'card': str_body['card']}
+            users.insert(user_to_create)
+            return user_to_create, 201, {'Content-type': 'application/json'}
         else:
             return 'User already registered', 400
     # Devuelvo user.
@@ -119,17 +131,29 @@ def loginUser():
     :statuscode 200: Logueo exitoso
     :statuscode 401: Acceso denegado
     """
-    user = {
-        'userId': 'userId',
-        'name': 'Agustin',
-        'surname': 'Perrotta',
-        'email': 'aperrotta@gmail.com', 
-        'fbAccount': 'test',
-        'gmail' : 'suga92@gmail.com',
-        'isDriver': True
-    }
-
-    return jsonify(user), 200
+    body = json.dumps(request.json)
+    str_body = json.loads(body)
+    # Me quedo con el token
+    fb_token = str_body['fb_token']
+    if not fb_token:
+        return 'Token not found', 400
+    # Request a facebook
+    fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token).content
+    fb_body = json.loads(fb_response)
+    if 'error' not in fb_response:
+        users = mongo.db.users
+        user = users.find_one({'user_id': fb_body['id']})
+        if not user:
+            drivers = mongo.db.drivers
+            driver = drivers.find_one({'user_id': fb_body['id']})
+            if not driver:
+                return 'User not registered', 400
+            else:
+                return JSONEncoder().encode(driver), 200,  {'Content-type': 'application/json'}
+        else:
+            return JSONEncoder().encode(user), 200,  {'Content-type': 'application/json'}
+    # Devuelvo user.
+    return fb_response, 400
 
 @app.route("/api/user/update", methods=['PUT'])
 def updateUser():
