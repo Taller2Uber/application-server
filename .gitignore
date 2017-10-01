@@ -2,6 +2,8 @@
 *.pyo
 .env
 .flaskenv
+.idea
+.idea/
 env
 env*
 llevame/lib
