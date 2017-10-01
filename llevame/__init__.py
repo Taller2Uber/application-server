@@ -4,8 +4,6 @@ from flask import Flask, jsonify, request, json
 from flask_pymongo import PyMongo
 import logging
 
-from User import User
-
 # Configuracion de logs
 logging.basicConfig(filename='example.log',level=logging.ERROR,format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
