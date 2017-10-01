@@ -68,9 +68,18 @@ def register():
     if not fb_token:
         return 'Token not found', 400
     # Request a facebook
-    fb_user = requests.get('https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,picture').content
+    fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,picture').content
+    fb_body = json.loads(fb_response)
+    if 'error' not in fb_response:
+        users = mongo.db.users
+        user = users.find_one({ 'user_id' : fb_body['id']})
+        if not user:
+            users.insert({ 'user_id': fb_body['id'], 'name': fb_body['name']})
+            return 'Successfully created user', 200
+        else:
+            return 'User already registered', 400
     # Devuelvo user.
-    return fb_user, 200
+    return fb_response, 400
 
 @app.route("/api/user/login", methods=['POST'])
 def loginUser():
