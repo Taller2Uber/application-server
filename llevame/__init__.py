@@ -80,7 +80,7 @@ def register():
                            'longitude': str_body['long'],
                            'card': str_body['card']}
             users.insert(user_to_create)
-            return user_to_create, 200, {'Content-type': 'application/json'}
+            return JSONEncoder().encode(user_to_create), 201, {'Content-type': 'application/json'}
         else:
             return 'User already registered', 400
     # Devuelvo user.
