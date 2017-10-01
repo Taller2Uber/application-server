@@ -1,29 +1,35 @@
 import os
-from flask import Flask, jsonify
-import flask_restful
+import requests
+from flask import Flask, jsonify, request, json
 from flask_pymongo import PyMongo
-from flask import make_response
 import logging
 
+from User import User
+
+# Configuracion de logs
 logging.basicConfig(filename='example.log',level=logging.ERROR,format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
 app = Flask(__name__)
 
-#MONGO_URL = os.environ.get('MONGO_URL')
-#if not MONGO_URL:
-#    MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame";
+# Configuracion URI Mongo
+MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame";
+
+logging.error('using mongo cofiguration on init: %s', MONGO_URL)
+
+app.config['MONGO_URI'] = MONGO_URL
+mongo = PyMongo(app)
 
 
-#logging.error('using mongo cofiguration on init: %s', MONGO_URL)
-#app.config['MONGO_URI'] = MONGO_URL
-#mongo = PyMongo(app)
-
-@app.route('/')
+@app.route('/index')
 def index():
-    return '<h1> Taller 2 </h1>'
+    user = User("Peter","peter@gmail.com")
+    users = mongo.db.users
+    users.insert({"name": "Jose", "email": "jose@pelotas.com"})
+    return "Added user"
 
-@app.route("/api/user/create", methods=['POST'])
-def createUser():
+
+@app.route("/api/user", methods=['POST'])
+def register():
     """Creacion de usuarios.
 
     .. :quickref: El usuario se loguea con fb en la app mobile, y recibimos el token de fb como parametro y los datos en el body.
@@ -56,17 +62,17 @@ def createUser():
     :status 201: user created succesfully
     :returns: :class:`myapp.objects.user`
     """
-    user = {
-        'userId': 'userId',
-        'name': 'Agustin',
-        'surname': 'Perrotta',
-        'email': 'aperrotta@gmail.com', 
-        'fbAccount': 'test',
-        'gmail' : 'suga92@gmail.com',
-        'isDriver': True
-    }
-
-    return jsonify(user), 200
+    # Cargo el body de la request
+    body = json.dumps(request.json)
+    str_body = json.loads(body)
+    # Me quedo con el token
+    fb_token = str_body['fb_token']
+    if not fb_token:
+        return 'Token not found', 400
+    # Request a facebook
+    fb_user = requests.get('https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,picture').content
+    # Devuelvo user.
+    return fb_user, 200
 
 @app.route("/api/user/login", methods=['POST'])
 def loginUser():
@@ -470,7 +476,7 @@ def updateUserPosition():
     :statuscode 500: Error actualizando ubicacion
     """
     user = { 
-        'userId' :  {userId},
+        'userId' :  1,
         "actualPosition" : {
           "lat" : -34.588412, 
           "long" : -58.420596
@@ -481,4 +487,4 @@ def updateUserPosition():
 
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
