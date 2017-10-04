@@ -29,12 +29,12 @@ Para levantar el servidor es necesario correr los siguientes comandos:
     git clone https://github.com/Taller2Uber/application-server.git
 
     cd application-server
-
-    pip install -r requirements.txt
    
-En caso de no tener pip instalado, correr el siguiente comando:
-
     sudo apt-get install python-pip
+    
+    pip install -r requirements.txt
+    
+Con todo instalado, procedemos a levantar el servidor:
 
     source llevame/bin/activate
 
