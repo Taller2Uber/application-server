@@ -24,13 +24,6 @@ class JSONEncoder(json.JSONEncoder):
             return str(o)
         return json.JSONEncoder.default(self, o)
 
-@app.route('/index')
-def index():
-    user = User("Peter","peter@gmail.com")
-    users = mongo.db.users
-    users.insert({"name": "Jose", "email": "jose@pelotas.com"})
-    return "Added user"
-
 
 @app.route("/api/user", methods=['POST'])
 def register():
@@ -76,7 +69,7 @@ def register():
     # Request a facebook
     fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,gender').content
     fb_body = json.loads(fb_response)
-    if 'error' not in fb_response:
+    if 'error' not in fb_body:
         users = mongo.db.users
         user = users.find_one({ 'user_id' : fb_body['id']})
         if not user:
@@ -87,14 +80,14 @@ def register():
                            'longitude': str_body['long'],
                            'card': str_body['card']}
             users.insert(user_to_create)
-            return user_to_create, 201, {'Content-type': 'application/json'}
+            return JSONEncoder().encode(user_to_create), 201, {'Content-type': 'application/json'}
         else:
             return 'User already registered', 400
     # Devuelvo user.
     return fb_response, 400
 
 @app.route("/api/user/login", methods=['POST'])
-def loginUser():
+def login():
     """Logueo de usuarios. El usuario se loguea con fb en la app mobile, y recibimos el token de fb y mail para matchear con el usuario en la base de datos.
     
     **Example request**:
@@ -140,7 +133,7 @@ def loginUser():
     # Request a facebook
     fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token).content
     fb_body = json.loads(fb_response)
-    if 'error' not in fb_response:
+    if 'error' not in fb_body:
         users = mongo.db.users
         user = users.find_one({'user_id': fb_body['id']})
         if not user:
