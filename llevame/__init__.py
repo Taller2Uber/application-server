@@ -2,13 +2,16 @@ import os
 import requests
 from flask import Flask, jsonify, request, json
 from bson import ObjectId
+from flask_restplus import Resource, Api
 from flask_pymongo import PyMongo
+#import User
 import logging
 
 # Configuracion de logs
 logging.basicConfig(filename='example.log',level=logging.ERROR,format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
 app = Flask(__name__)
+api = Api(app)
 
 # Configuracion URI Mongo
 MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame";
@@ -18,6 +21,7 @@ logging.error('using mongo cofiguration on init: %s', MONGO_URL)
 app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
+# Serializador que quita el ObjectID que trae la db.
 class JSONEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, ObjectId):
