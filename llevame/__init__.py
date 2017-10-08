@@ -34,19 +34,26 @@ user_token = api.model('User token', {
     'fb_token': fields.String(required=True, description='User\s facebook token')
 })
 
+card = api.model('Card', {
+    'number': fields.String(required=True),
+    'expiration_date': fields.DateTime(required=True),
+    'company': fields.String(required=True)
+})
+
 user = api.model('User', {
     'fb_token': fields.String(required=True, description='User\s facebook token'),
     'latitude': fields.Integer(required=True, default=0),
     'longitude': fields.Integer(required=True, default=0),
-    'card': fields.String(required=True)
+    'card': fields.Nested(card)
 })
+
 
 @api.route('/api/v1/users')
 class UserController(Resource):
     @api.response(200, 'Success')
     def get(self):
         db_users = dumps(mongo.db.users.find())
-        return db_users, 200
+        return json.loads(db_users), 200, {'Content-type': 'application/json'}
 
     @api.expect(user, validate=True)
     def post(self):
@@ -55,15 +62,16 @@ class UserController(Resource):
         if not fb_token:
             return 'Token not found', 400
         # Request a facebook
-        fb_response = requests.get(
-            'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,gender').content
-        fb_body = json.loads(fb_response)
+        #fb_response = requests.get(
+         #   'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,gender,email').content
+        #fb_body = json.loads(fb_response)
+        fb_body = {'id': 15}
         if 'error' not in fb_body:
             users = mongo.db.users
             user = users.find_one({'user_id': fb_body['id']})
             if not user:
                 users.insert(request.json)
-                return request.json, 201, {'Content-type': 'application/json'}
+                return json.loads(dumps(request.json)), 201, {'Content-type': 'application/json'}
             else:
                 return 'User already registered', 400
         # Devuelvo el error de fb.
