@@ -62,7 +62,7 @@ driver = api.model('Driver', {
     'user': fields.Nested(user)
 })
 
-passenger = api.model('passenger', {
+passenger = api.model('Passenger', {
     'latitude': fields.Integer(),
     'longitude': fields.Integer(),
     'card': fields.Nested(card, required=True),
@@ -188,7 +188,7 @@ class UserLoginController(Resource):
             else:
                 return json.loads(dumps(passenger)), 200, {'Content-type': 'application/json'}
         # Devuelvo user.
-        return fb_response, 400
+        return fb_body, 400
 
 
 @app.route("/api/user/update", methods=['PUT'])
