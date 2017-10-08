@@ -30,8 +30,12 @@ class JSONEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, o)
 
 
+user_token = api.model('User token', {
+    'fb_token': fields.String(required=True, description='User\s facebook token')
+})
+
 user = api.model('User', {
-    'fb_token': fields.String(required=True, description='User\'s facebook token'),
+    'fb_token': fields.String(required=True, description='User\s facebook token'),
     'latitude': fields.Integer(required=True, default=0),
     'longitude': fields.Integer(required=True, default=0),
     'card': fields.String(required=True)
@@ -66,67 +70,31 @@ class UserController(Resource):
         return fb_body, 400
 
 
-@app.route("/api/user/login", methods=['POST'])
-def login():
-    """Logueo de usuarios. El usuario se loguea con fb en la app mobile, y recibimos el token de fb y mail para matchear con el usuario en la base de datos.
-
-    **Example request**:
-
-    .. sourcecode:: http
-
-      POST /api/user/login HTTP/1.1
-      Accept: application/json
-      Content-Type: application/json
-      {
-        "email":"aperrotta@gmail.com",
-        "token" : "{token}"
-      }
-
-    **Example response**:
-
-    .. sourcecode:: http
-
-      HTTP/1.1 200 OK
-      Vary: Accept
-
-      Content-Type: application/json
-      {
-        'userId': {userId},
-        'name': 'Agustin',
-        'surname': 'Perrotta',
-        'email': 'aperrotta@gmail.com',
-        'fbAccount': 'test',
-        'gmail' : 'suga92@gmail.com',
-        'isDriver': True
-      }
-
-    :resheader Content-Type: application/json
-    :statuscode 200: Logueo exitoso
-    :statuscode 401: Acceso denegado
-    """
-    body = json.dumps(request.json)
-    str_body = json.loads(body)
-    # Me quedo con el token
-    fb_token = str_body['fb_token']
-    if not fb_token:
-        return 'Token not found', 400
-    # Request a facebook
-    fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token).content
-    fb_body = json.loads(fb_response)
-    if 'error' not in fb_body:
-        users = mongo.db.users
-        user = users.find_one({'user_id': fb_body['id']})
-        if not user:
-            drivers = mongo.db.drivers
-            driver = drivers.find_one({'user_id': fb_body['id']})
-            if not driver:
-                return 'User not registered', 400
+@api.route("/api/v1/users/login")
+class UserLoginController(Resource):
+    @api.expect(user_token, validate=True)
+    def post(self):
+        # Me quedo con el token
+        fb_token = request.json['fb_token']
+        if not fb_token:
+            return 'Token not found', 400
+        # Request a facebook
+        fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token).content
+        fb_body = json.loads(fb_response)
+        if 'error' not in fb_body:
+            users = mongo.db.users
+            user = users.find_one({'user_id': fb_body['id']})
+            if not user:
+                drivers = mongo.db.drivers
+                driver = drivers.find_one({'user_id': fb_body['id']})
+                if not driver:
+                    return 'User not registered', 400
+                else:
+                    return JSONEncoder().encode(driver), 200, {'Content-type': 'application/json'}
             else:
-                return JSONEncoder().encode(driver), 200, {'Content-type': 'application/json'}
-        else:
-            return JSONEncoder().encode(user), 200, {'Content-type': 'application/json'}
-    # Devuelvo user.
-    return fb_response, 400
+                return JSONEncoder().encode(user), 200, {'Content-type': 'application/json'}
+        # Devuelvo user.
+        return fb_response, 400
 
 
 @app.route("/api/user/update", methods=['PUT'])
