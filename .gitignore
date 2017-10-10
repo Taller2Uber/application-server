@@ -7,6 +7,7 @@
 env
 env*
 llevame/lib
+llevame/lib/
 __pycache__/
 *.py[cod]
 .Python
