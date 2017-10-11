@@ -81,7 +81,7 @@ class SSController(Resource):
             ss_body_response = json.loads(ss_response)
             if ss_body_response['Token']:
                 AS_SS_ID = as_id
-                SS_TOKEN = ss_body_response['Token']
+                SS_TOKEN = ss_body_response['token.token']
             return {'message': 'App-Server initialized correctly'}, 200, {'Content-type': 'application/json'}
 
 
