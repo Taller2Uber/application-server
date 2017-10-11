@@ -14,21 +14,18 @@ logging.basicConfig(filename='example.log', level=logging.ERROR, format='%(ascti
 app = Flask(__name__)
 api = Api(app)
 
+
 # Configuracion URI Mongo
-MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame";
+MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame"
 
 logging.error('using mongo cofiguration on init: %s', MONGO_URL)
 
 app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
-
-class JSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, ObjectId):
-            return str(o)
-        return json.JSONEncoder.default(self, o)
-
+SS_URL = 'https://taller2-grupo7-shared.herokuapp.com'
+SS_TOKEN = 'token'
+AS_SS_ID = 0
 
 user_token = api.model('User token', {
     'fb_token': fields.String(required=True, description='User\s facebook token')
@@ -68,6 +65,24 @@ passenger = api.model('Passenger', {
     'card': fields.Nested(card, required=True),
     'user': fields.Nested(user)
 })
+
+@api.route('/api/v1/ss/init')
+class SSController(Resource):
+
+    def post(self):
+        # Agarro el id del body
+        as_id = request.json['id']
+        if not as_id:
+            return {'error': 'Server not initialized'}, 400, {'Content-type': 'application/json'}
+        else:
+            # Request a facebook
+            body = {'id': as_id}
+            ss_response = requests.post(SS_URL + '/servers/ping', data=body)
+            ss_body_response = json.loads(ss_response)
+            if ss_body_response['Token']:
+                AS_SS_ID = as_id
+                SS_TOKEN = ss_body_response['Token']
+            return {'message': 'App-Server initialized correctly'}, 200, {'Content-type': 'application/json'}
 
 
 @api.route('/api/v1/drivers')
@@ -117,6 +132,14 @@ class PassengersController(Resource):
             'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,gender').content
         fb_body = json.loads(fb_response)
         if 'error' not in fb_body:
+            ss_body = {
+                'username': fb_body.get('name'),
+                "password": "password",
+                "facebookAuthToken": request.json['fb_token']
+            }
+            ss_request = requests.post(
+                SS_URL + '/users/validate', data = ss_body)
+            ss_response = json.loads(ss_request)
             passengers = mongo.db.passengers
             passenger = passengers.find_one({'user.fb_id': fb_body['id']})
             if not passenger:
