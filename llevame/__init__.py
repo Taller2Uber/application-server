@@ -78,10 +78,11 @@ class SSController(Resource):
             # Request a facebook
             body = {'id': as_id}
             ss_response = requests.post(SS_URL + '/servers/ping', data=body)
-            ss_body_response = json.loads(ss_response)
-            if ss_body_response['Token']:
+            ss_body_response = ss_response.json()
+            if ss_body_response['token']:
                 AS_SS_ID = as_id
-                SS_TOKEN = ss_body_response['token.token']
+                SS_TOKEN = ss_body_response['token']
+                print SS_TOKEN
             return {'message': 'App-Server initialized correctly'}, 200, {'Content-type': 'application/json'}
 
 
