@@ -104,9 +104,9 @@ class DriversController(Resource):
             drivers = mongo.db.drivers
             driver = drivers.find_one({'user.fb_id': fb_body['id']})
             if not driver:
-                driver_to_insert = {'user': {'fb_id':fb_body['id'], 'fb_token': fb_token,
+                driver_to_insert = {'fb_id':fb_body['id'], 'fb_token': fb_token,
                     'name': fb_body.get('name'),
-                    'gender': fb_body.get('gender')},
+                    'gender': fb_body.get('gender'),
                     'latitude': request.json.get('latitude'),
                     'longitude': request.json.get('longitude'),
                     'cars': request.json.get('cars')}
@@ -138,15 +138,15 @@ class PassengersController(Resource):
                 "password": "password",
                 "facebookAuthToken": request.json['fb_token']
             }
-            ss_request = requests.post(
-                SS_URL + '/users/validate', data = ss_body)
-            ss_response = json.loads(ss_request)
+            #ss_request = requests.post(
+            #    SS_URL + '/users/validate', data = ss_body)
+            #ss_response = ss_request.json()
             passengers = mongo.db.passengers
             passenger = passengers.find_one({'user.fb_id': fb_body['id']})
             if not passenger:
-                passenger_to_insert = {'user': {'fb_id': fb_body['id'], 'fb_token': fb_token,
+                passenger_to_insert = {'fb_id': fb_body['id'], 'fb_token': fb_token,
                                              'name': fb_body.get('name'),
-                                             'gender': fb_body.get('gender')},
+                                             'gender': fb_body.get('gender'),
                                     'latitude': request.json.get('latitude'),
                                     'longitude': request.json.get('longitude'),
                                     'card': request.json.get('card')}
@@ -170,10 +170,10 @@ class UserLoginController(Resource):
         fb_body = json.loads(fb_response)
         if 'error' not in fb_body:
             passengers = mongo.db.passengers
-            passenger = passengers.find_one({'user.fb_id': fb_body['id']})
+            passenger = passengers.find_one({'fb_id': fb_body['id']})
             if not passenger:
                 drivers = mongo.db.drivers
-                driver = drivers.find_one({'user.fb_id': fb_body['id']})
+                driver = drivers.find_one({'fb_id': fb_body['id']})
                 if not driver:
                     return 'User not registered', 400
                 else:
