@@ -10,3 +10,8 @@ script:
 
 after_success:
   - codecov
+
+deploy:
+  provider: heroku
+  api_key:
+    secure: "fdf87151-fe53-49a7-8f2d-c88c4c788ad6"

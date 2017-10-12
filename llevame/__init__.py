@@ -102,7 +102,7 @@ class DriversController(Resource):
         fb_body = json.loads(fb_response)
         if 'error' not in fb_body:
             drivers = mongo.db.drivers
-            driver = drivers.find_one({'user.fb_id': fb_body['id']})
+            driver = drivers.find_one({'fb_id': fb_body['id']})
             if not driver:
                 driver_to_insert = {'fb_id':fb_body['id'], 'fb_token': fb_token,
                     'name': fb_body.get('name'),
@@ -142,7 +142,7 @@ class PassengersController(Resource):
             #    SS_URL + '/users/validate', data = ss_body)
             #ss_response = ss_request.json()
             passengers = mongo.db.passengers
-            passenger = passengers.find_one({'user.fb_id': fb_body['id']})
+            passenger = passengers.find_one({'fb_id': fb_body['id']})
             if not passenger:
                 passenger_to_insert = {'fb_id': fb_body['id'], 'fb_token': fb_token,
                                              'name': fb_body.get('name'),
