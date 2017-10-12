@@ -5,5 +5,8 @@ RUN apt-get install -y python-pip python-dev build-essential
 COPY . /llevame
 WORKDIR /llevame
 RUN pip install -r requirements.txt
-ENTRYPOINT ["gunicorn"]
-CMD ["llevame:app"]
+RUN useradd -m myuser
+USER myuser
+CMD gunicorn --bind 0.0.0.0:$PORT llevame:app
+
+
