@@ -1,12 +1,16 @@
-import os
 import requests
 from bson.json_util import dumps
-from flask import Flask, jsonify, request, json
-from bson import ObjectId
+from flask import Flask, request, json
+from flask_restful import reqparse
+from flask_restful.inputs import boolean
 from flask_restplus import Resource, Api, fields
 from flask_pymongo import PyMongo
 import logging
+from flask_api import status
+from werkzeug.contrib.cache import SimpleCache
 
+# Configuro el cache
+cache = SimpleCache()
 # Configuracion de logs
 logging.basicConfig(filename='example.log', level=logging.ERROR, format='%(asctime)s %(message)s',
                     datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -23,20 +27,12 @@ logging.error('using mongo cofiguration on init: %s', MONGO_URL)
 app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
-SS_URL = 'https://taller2-grupo7-shared.herokuapp.com'
-SS_TOKEN = 'token'
-AS_SS_ID = 0
+# Configuraciones Shared Server
+SS_URL = 'http://172.20.10.3:3000'
+app_body = { 'id': 1 }
 
 user_token = api.model('User token', {
     'fb_token': fields.String(required=True, description='User\s facebook token')
-})
-
-user = api.model('User', {
-    'fb_id': fields.String(),
-    'fb_token': fields.String(required=True, description='User\s facebook token'),
-    'name': fields.String(),
-    'gender': fields.String(),
-    'email': fields.String()
 })
 
 card = api.model('Card', {
@@ -56,15 +52,55 @@ driver = api.model('Driver', {
     'latitude': fields.Integer(),
     'longitude': fields.Integer(),
     'cars': fields.List(fields.Nested(car),required=True),
-    'user': fields.Nested(user)
+    'fb_id': fields.String(),
+    'fb_token': fields.String(required=True, description='User\s facebook token'),
+    'name': fields.String(),
+    'gender': fields.String(),
+    'email': fields.String(),
+    'available': fields.Boolean(default=True)
 })
 
 passenger = api.model('Passenger', {
     'latitude': fields.Integer(),
     'longitude': fields.Integer(),
     'card': fields.Nested(card, required=True),
-    'user': fields.Nested(user)
+    'fb_id': fields.String(),
+    'fb_token': fields.String(required=True, description='User\s facebook token'),
+    'name': fields.String(),
+    'gender': fields.String(),
+    'email': fields.String()
 })
+
+passenger_update = api.model('Passenger for update', {
+    'latitude': fields.Integer(),
+    'longitude': fields.Integer(),
+    'card': fields.Nested(card),
+    'fb_id': fields.String(required=True),
+    'fb_token': fields.String()
+})
+
+driver_update = api.model('Driver for update', {
+    'latitude': fields.Integer(),
+    'longitude': fields.Integer(),
+    'cars': fields.List(fields.Nested(car)),
+    'fb_id': fields.String(required=True),
+    'fb_token': fields.String(),
+    'available': fields.Boolean()
+})
+
+driver_parser = reqparse.RequestParser()
+# Look only in the querystring
+driver_parser.add_argument('available', type=boolean, location='args')
+
+### HELPER FUNCTIONS ##
+
+def get_cache(str):
+    var = cache.get(str)
+    if not var:
+        return "NOT_SET_YET"
+    return var
+
+########################
 
 @api.route('/api/v1/ss/init')
 class SSController(Resource):
@@ -90,32 +126,79 @@ class SSController(Resource):
 class DriversController(Resource):
     @api.response(200, 'Success')
     def get(self):
-        db_drivers = dumps(mongo.db.drivers.find())
+        args = driver_parser.parse_args()
+        if args:
+            db_drivers = dumps(mongo.db.drivers.find({'available': args['available']}))
+        else:
+            db_drivers = dumps(mongo.db.drivers.find())
         return json.loads(db_drivers), 200, {'Content-type': 'application/json'}
 
     @api.expect(driver, validate=True)
     def post(self):
-        # Me quedo con el token
-        fb_token = request.json['fb_token']
-        # Request a facebook
-        fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,gender').content
-        fb_body = json.loads(fb_response)
-        if 'error' not in fb_body:
-            drivers = mongo.db.drivers
-            driver = drivers.find_one({'fb_id': fb_body['id']})
-            if not driver:
-                driver_to_insert = {'fb_id':fb_body['id'], 'fb_token': fb_token,
-                    'name': fb_body.get('name'),
-                    'gender': fb_body.get('gender'),
-                    'latitude': request.json.get('latitude'),
-                    'longitude': request.json.get('longitude'),
-                    'cars': request.json.get('cars')}
-                drivers.insert(driver_to_insert)
-                return json.loads(dumps(driver_to_insert)), 201, {'Content-type': 'application/json'}
+        fb_token = request.json.get('fb_token')
+        ss_response = requests.post(SS_URL + '/users/validate', json={'facebookAuthToken': fb_token}, headers={'ApplicationToken': cache.get('app-token')})
+        if 401 == ss_response.status_code:
+            logging.error('Aplicacion desautorizada, intentando loguearse ...')
+            ss_ping = requests.post(SS_URL + '/servers/ping', json=app_body, headers={'ApplicationToken': cache.get('app-token')})
+            if 200 == ss_ping.status_code:
+                logging.info('Aplicacion logueada correctamente')
+                ss_app_data = json.loads(ss_ping.content)
+                cache.set('app-token', ss_app_data['token'])
+                ss_response = requests.post(SS_URL + '/users/validate', json={'facebookAuthToken': fb_token},headers={'ApplicationToken': cache.get('app-token')})
             else:
+                return {'error': 'Error comunicating with Shared-Server'}, ss_ping.status_code, {'Content-type': 'application/json'}
+
+        ss_body = json.loads(ss_response.content)
+        if 'error' not in ss_body:
+            drivers = mongo.db.drivers
+            driver = drivers.find_one({'fb_id': ss_body['id']})
+            if not driver:
+                ss_create_driver = requests.post(SS_URL + '/users', json={
+                    'type': 'driver',
+                    'username': 'default',
+                    'password': 'default',
+                    'fb': { 'userId': ss_body['id'], 'authToken': fb_token},
+                    'firstname': ss_body['name'],
+                    'lastname': 'default',
+                    'country': 'default',
+                    'email': 'default',
+                    'birthdate': '1992-09-15'
+                }, headers={'ApplicationToken': cache.get('app-token')})
+                if 201 == ss_create_driver.status_code:
+                    driver_to_insert = {'fb_id':ss_body['id'], 'fb_token': fb_token,
+                        'name': ss_body.get('name'),
+                        'gender': ss_body.get('gender'),
+                        'latitude': request.json.get('latitude'),
+                        'longitude': request.json.get('longitude'),
+                        'cars': request.json.get('cars'),
+                        'available': True}
+                    drivers.insert(driver_to_insert)
+                    return json.loads(dumps(driver_to_insert)), 201, {'Content-type': 'application/json'}
+                else:
+                    logging.error('Error comunicating with shared-server, status: %s', ss_create_driver.status_code)
+                    return {'error': 'Error comunicating with Shared-Server'}, ss_create_driver.status_code, {'Content-type': 'application/json'}
+            else:
+                logging.error('Driver already registered id: %s', ss_body['id'])
                 return {'error': 'Driver already registered'}, 400, {'Content-type': 'application/json'}
-        # Devuelvo el error de fb.
-        return fb_body, 400
+        # Devuelvo el error de ss.
+        return ss_body, 400
+
+@api.route('/api/v1/drivers/<string:driver_id>')
+class DriverController(Resource):
+    def get(self, driver_id):
+        db_driver = mongo.db.drivers.find_one({'fb_id': driver_id})
+        if not db_driver:
+            return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
+        return json.loads(dumps(db_driver)), 200, {'Content-type': 'application/json'}
+
+    @api.expect(driver_update)
+    def put(self, driver_id):
+        db_driver = mongo.db.drivers.find_one({'fb_id': driver_id})
+        if not db_driver:
+            return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
+        mongo.db.drivers.update_one({'fb_id': driver_id}, {'$set': request.get_json()})
+        return json.loads(dumps(mongo.db.drivers.find_one({'fb_id': driver_id}))), 200, {'Content-type': 'application/json'}
+
 
 @api.route('/api/v1/passengers')
 class PassengersController(Resource):
@@ -157,6 +240,24 @@ class PassengersController(Resource):
         # Devuelvo el error de fb.
         return fb_body, 400
 
+@api.route('/api/v1/passengers/<string:passenger_id>')
+class PassengerController(Resource):
+
+    def get(self, passenger_id):
+        db_passenger = mongo.db.passengers.find_one({'fb_id': passenger_id})
+        if not db_passenger:
+            return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
+        return json.loads(dumps(db_passenger)), 200, {'Content-type': 'application/json'}
+
+    @api.expect(passenger_update)
+    def put(self, passenger_id):
+        db_passenger = mongo.db.passengers.find_one({'fb_id': passenger_id})
+        if not db_passenger:
+            return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
+        mongo.db.drivers.update_one({'fb_id': passenger_id}, {'$set': request.get_json()})
+        return json.loads(dumps(mongo.db.drivers.find_one({'fb_id': passenger_id}))), 200, {'Content-type': 'application/json'}
+
+
 @api.route("/api/v1/users/login")
 class UserLoginController(Resource):
     @api.expect(user_token, validate=True)
@@ -180,7 +281,7 @@ class UserLoginController(Resource):
                     return json.loads(dumps(driver)), 200, {'Content-type': 'application/json'}
             else:
                 return json.loads(dumps(passenger)), 200, {'Content-type': 'application/json'}
-        # Devuelvo user.
+        # Devuelvo error de facebook.
         return fb_body, 400
 
 if __name__ == "__main__":
