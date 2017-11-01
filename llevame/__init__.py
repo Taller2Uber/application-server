@@ -6,7 +6,7 @@ from flask_restful.inputs import boolean
 from flask_restplus import Resource, Api, fields
 from flask_pymongo import PyMongo
 import logging
-from flask_api import status
+import json
 from werkzeug.contrib.cache import SimpleCache
 
 # Configuro el cache
@@ -28,8 +28,11 @@ app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
 # Configuraciones Shared Server
-SS_URL = 'http://172.20.10.3:3000'
-app_body = { 'id': 1 }
+with open('config.json') as data_file:
+    conf = json.load(data_file)
+cache.set('app-id', conf["as_id"])
+cache.set('app-token', conf["as_token"])
+cache.set('ss-url', conf["ss_url"])
 
 user_token = api.model('User token', {
     'fb_token': fields.String(required=True, description='User\s facebook token')
@@ -102,25 +105,6 @@ def get_cache(str):
 
 ########################
 
-@api.route('/api/v1/ss/init')
-class SSController(Resource):
-
-    def post(self):
-        # Agarro el id del body
-        as_id = request.json['id']
-        if not as_id:
-            return {'error': 'Server not initialized'}, 400, {'Content-type': 'application/json'}
-        else:
-            # Request a facebook
-            body = {'id': as_id}
-            ss_response = requests.post(SS_URL + '/servers/ping', data=body)
-            ss_body_response = ss_response.json()
-            if ss_body_response['token']:
-                AS_SS_ID = as_id
-                SS_TOKEN = ss_body_response['token']
-                print SS_TOKEN
-            return {'message': 'App-Server initialized correctly'}, 200, {'Content-type': 'application/json'}
-
 
 @api.route('/api/v1/drivers')
 class DriversController(Resource):
@@ -136,24 +120,13 @@ class DriversController(Resource):
     @api.expect(driver, validate=True)
     def post(self):
         fb_token = request.json.get('fb_token')
-        ss_response = requests.post(SS_URL + '/users/validate', json={'facebookAuthToken': fb_token}, headers={'ApplicationToken': cache.get('app-token')})
-        if 401 == ss_response.status_code:
-            logging.error('Aplicacion desautorizada, intentando loguearse ...')
-            ss_ping = requests.post(SS_URL + '/servers/ping', json=app_body, headers={'ApplicationToken': cache.get('app-token')})
-            if 200 == ss_ping.status_code:
-                logging.info('Aplicacion logueada correctamente')
-                ss_app_data = json.loads(ss_ping.content)
-                cache.set('app-token', ss_app_data['token'])
-                ss_response = requests.post(SS_URL + '/users/validate', json={'facebookAuthToken': fb_token},headers={'ApplicationToken': cache.get('app-token')})
-            else:
-                return {'error': 'Error comunicating with Shared-Server'}, ss_ping.status_code, {'Content-type': 'application/json'}
-
+        ss_response = requests.post(cache.get('ss-url') + '/users/validate', json={'facebookAuthToken': fb_token}, headers={'ApplicationToken': cache.get('app-token')})
         ss_body = json.loads(ss_response.content)
         if 'error' not in ss_body:
             drivers = mongo.db.drivers
             driver = drivers.find_one({'fb_id': ss_body['id']})
             if not driver:
-                ss_create_driver = requests.post(SS_URL + '/users', json={
+                ss_create_driver = requests.post(cache.get('ss-url') + '/users', json={
                     'type': 'driver',
                     'username': 'default',
                     'password': 'default',
@@ -222,7 +195,7 @@ class PassengersController(Resource):
                 "facebookAuthToken": request.json['fb_token']
             }
             #ss_request = requests.post(
-            #    SS_URL + '/users/validate', data = ss_body)
+            #    cache.get('ss-url') + '/users/validate', data = ss_body)
             #ss_response = ss_request.json()
             passengers = mongo.db.passengers
             passenger = passengers.find_one({'fb_id': fb_body['id']})
