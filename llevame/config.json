@@ -1,5 +1,5 @@
 {
   "as_id": 1,
   "as_token": "app-token",
-  "ss_url": "http://172.20.10.3:3000"
+  "ss_url": "https://taller2-grupo7-shared.herokuapp.com"
 }

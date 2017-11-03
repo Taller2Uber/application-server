@@ -33,6 +33,7 @@ with open('config.json') as data_file:
 cache.set('app-id', conf["as_id"])
 cache.set('app-token', conf["as_token"])
 cache.set('ss-url', conf["ss_url"])
+ss_response = requests.post(cache.get('ss-url') + '/api/servers/ping', headers={'token': cache.get('app-token')})
 
 user_token = api.model('User token', {
     'fb_token': fields.String(required=True, description='User\s facebook token')
@@ -117,10 +118,16 @@ class DriversController(Resource):
             db_drivers = dumps(mongo.db.drivers.find())
         return json.loads(db_drivers), 200, {'Content-type': 'application/json'}
 
-    @api.expect(driver, validate=True)
+    @api.expect(driver)
     def post(self):
-        fb_token = request.json.get('fb_token')
-        ss_response = requests.post(cache.get('ss-url') + '/users/validate', json={'facebookAuthToken': fb_token}, headers={'ApplicationToken': cache.get('app-token')})
+        if request.json.get('fb_token'):
+            fb_token = request.json.get('fb_token')
+            ss_response = requests.post(cache.get('ss-url') + '/users/validate', json={'facebookAuthToken': fb_token}, headers={'token': cache.get('app-token')})
+
+        else:
+            userName = request.json.get('user_name')
+            password = request.json.get('password')
+            ss_response = requests.post(cache.get('ss-url') + '/users/validate', json={'username': userName, 'password': password}, headers={'token': cache.get('app-token')})
         ss_body = json.loads(ss_response.content)
         if 'error' not in ss_body:
             drivers = mongo.db.drivers
@@ -136,7 +143,7 @@ class DriversController(Resource):
                     'country': 'default',
                     'email': 'default',
                     'birthdate': '1992-09-15'
-                }, headers={'ApplicationToken': cache.get('app-token')})
+                }, headers={'token': cache.get('app-token')})
                 if 201 == ss_create_driver.status_code:
                     driver_to_insert = {'fb_id':ss_body['id'], 'fb_token': fb_token,
                         'name': ss_body.get('name'),
