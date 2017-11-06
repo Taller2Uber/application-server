@@ -1,7 +1,9 @@
+from builtins import staticmethod
+
 import requests
 from bson.json_util import dumps
 from flask import Flask, request, json
-from flask_restful import reqparse
+from flask_restful import reqparse, abort
 from flask_restful.inputs import boolean
 from flask_restplus import Resource, Api, fields
 from flask_pymongo import PyMongo
@@ -10,6 +12,8 @@ from flask_api import status
 from werkzeug.contrib.cache import SimpleCache
 
 # Configuro el cache
+from llevame.lib.itsdangerous import Serializer, SignatureExpired, BadSignature
+
 cache = SimpleCache()
 # Configuracion de logs
 logging.basicConfig(filename='example.log', level=logging.ERROR, format='%(asctime)s %(message)s',
@@ -100,6 +104,13 @@ def get_cache(str):
         return "NOT_SET_YET"
     return var
 
+def validate_auth():
+	auth = request.authorization
+	if not auth:  # no header set
+		abort(401)
+	user = UserModel.query.filter_by(username=auth.username).first()
+	if user is None or user.password != auth.password:
+		abort(401)
 ########################
 
 @api.route('/api/v1/ss/init')
@@ -283,6 +294,26 @@ class UserLoginController(Resource):
                 return json.loads(dumps(passenger)), 200, {'Content-type': 'application/json'}
         # Devuelvo error de facebook.
         return fb_body, 400
+
+class User:
+    def __init__(self):
+        pass
+
+    def generate_auth_token(self, expiration=600):
+        s = Serializer(app.config['SECRET_KEY'], expires_in=expiration)
+        return s.dumps({'id': 'llevame'})
+
+    @staticmethod
+    def verify_auth_token(token):
+        s = Serializer(app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token)
+        except SignatureExpired:
+            return None  # valid token, but expired
+        except BadSignature:
+            return None  # invalid token
+        user = User.query.get(data['id'])
+        return user
 
 if __name__ == "__main__":
     app.run(debug=True)
