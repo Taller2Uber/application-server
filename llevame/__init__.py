@@ -30,10 +30,9 @@ mongo = PyMongo(app)
 # Configuraciones Shared Server
 with open('config.json') as data_file:
     conf = json.load(data_file)
-cache.set('app-id', conf["as_id"])
 cache.set('app-token', conf["as_token"])
 cache.set('ss-url', conf["ss_url"])
-ss_response = requests.post(cache.get('ss-url') + '/api/servers/ping', headers={'token': cache.get('app-token')})
+
 
 user_token = api.model('User token', {
     'fb_token': fields.String(required=True, description='User\s facebook token')
@@ -240,29 +239,23 @@ class PassengerController(Resource):
 
 @api.route("/api/v1/users/login")
 class UserLoginController(Resource):
-    @api.expect(user_token, validate=True)
+    @api.expect(user_token)
     def post(self):
-        # Me quedo con el token
-        fb_token = request.json['fb_token']
-        if not fb_token:
-            return 'Token not found', 400
-        # Request a facebook
-        fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token).content
-        fb_body = json.loads(fb_response)
-        if 'error' not in fb_body:
-            passengers = mongo.db.passengers
-            passenger = passengers.find_one({'fb_id': fb_body['id']})
-            if not passenger:
-                drivers = mongo.db.drivers
-                driver = drivers.find_one({'fb_id': fb_body['id']})
-                if not driver:
-                    return 'User not registered', 400
-                else:
-                    return json.loads(dumps(driver)), 200, {'Content-type': 'application/json'}
-            else:
-                return json.loads(dumps(passenger)), 200, {'Content-type': 'application/json'}
-        # Devuelvo error de facebook.
-        return fb_body, 400
+        fb_token = request.json.get('fb_token')
+        username = request.json.get('username')
+        password = request.json.get('password')
+        if fb_token and not username and not password:
+            body = {"facebookAuthToken": fb_token}
+        elif not fb_token and username and password:
+            body = {"username": username, "password": password}
+        else:
+            return {'error': 'Bad Request'}, 400
+        ss_response = requests.post(cache.get('ss-url') + '/api/users/validate',
+                                    json=body,
+                                    headers={'token': cache.get('app-token')}).content
+        fb_body = json.loads(ss_response)
+
+        return fb_body, 200
 
 if __name__ == "__main__":
     app.run(debug=True)
