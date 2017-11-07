@@ -12,7 +12,7 @@ from werkzeug.contrib.cache import SimpleCache
 # Configuro el cache
 cache = SimpleCache()
 # Configuracion de logs
-logging.basicConfig(filename='example.log', level=logging.ERROR, format='%(asctime)s %(message)s',
+logging.basicConfig(filename='application.log', level=logging.ERROR, format='%(asctime)s %(message)s',
                     datefmt='%m/%d/%Y %I:%M:%S %p')
 
 app = Flask(__name__)
@@ -119,48 +119,51 @@ class DriversController(Resource):
 
     @api.expect(driver)
     def post(self):
-        if request.json.get('fb_token'):
-            fb_token = request.json.get('fb_token')
-            ss_response = requests.post(cache.get('ss-url') + '/users/validate', json={'facebookAuthToken': fb_token}, headers={'token': cache.get('app-token')})
-
+        drivers = mongo.db.drivers
+        fb_token = request.json.get('fb_token')
+        user_name = request.json.get('user_name')
+        password = request.json.get('password')
+        if fb_token:
+            driver = drivers.find_one({'fb_token': fb_token})
         else:
-            userName = request.json.get('user_name')
-            password = request.json.get('password')
-            ss_response = requests.post(cache.get('ss-url') + '/users/validate', json={'username': userName, 'password': password}, headers={'token': cache.get('app-token')})
-        ss_body = json.loads(ss_response.content)
-        if 'error' not in ss_body:
-            drivers = mongo.db.drivers
-            driver = drivers.find_one({'fb_id': ss_body['id']})
-            if not driver:
-                ss_create_driver = requests.post(cache.get('ss-url') + '/users', json={
-                    'type': 'driver',
-                    'username': 'default',
-                    'password': 'default',
-                    'fb': { 'userId': ss_body['id'], 'authToken': fb_token},
-                    'firstname': ss_body['name'],
-                    'lastname': 'default',
-                    'country': 'default',
-                    'email': 'default',
-                    'birthdate': '1992-09-15'
-                }, headers={'token': cache.get('app-token')})
-                if 201 == ss_create_driver.status_code:
-                    driver_to_insert = {'fb_id':ss_body['id'], 'fb_token': fb_token,
-                        'name': ss_body.get('name'),
-                        'gender': ss_body.get('gender'),
-                        'latitude': request.json.get('latitude'),
-                        'longitude': request.json.get('longitude'),
-                        'cars': request.json.get('cars'),
-                        'available': True}
-                    drivers.insert(driver_to_insert)
-                    return json.loads(dumps(driver_to_insert)), 201, {'Content-type': 'application/json'}
-                else:
-                    logging.error('Error comunicating with shared-server, status: %s', ss_create_driver.status_code)
-                    return {'error': 'Error comunicating with Shared-Server'}, ss_create_driver.status_code, {'Content-type': 'application/json'}
+            driver = drivers.find_one({'user_name': user_name, 'password': password})
+        if not driver:
+            ss_create_driver = requests.post(cache.get('ss-url') + '/api/users', json={
+                'type': 'driver',
+                'username': user_name or 'default',
+                'password': password or 'default',
+                'fb': {'authToken': fb_token},
+                'firstname': request.json.get('first_name') or 'default',
+                'lastname': request.json.get('last_name') or 'default',
+                'country': request.json.get('country') or 'default',
+                'email': request.json.get('email') or 'default',
+                'birthdate': request.json.get('birthday') or '09-09-1970'
+            }, headers={'token': cache.get('app-token')})
+            if 201 == ss_create_driver.status_code:
+                json_response = json.loads(ss_create_driver.content)
+                created_driver = json_response.get('user')
+                driver_to_insert = {
+                    'id': created_driver.get('id'),
+                    '_ref': created_driver.get('_ref'),
+                    'fb_token': fb_token,
+                    'firstname': created_driver.get('firstname'),
+                    'lastname': created_driver.get('lastname'),
+                    'email': created_driver.get('email'),
+                    'country': created_driver.get('country'),
+                    'gender': created_driver.get('gender'),
+                    'latitude': request.json.get('latitude'),
+                    'longitude': request.json.get('longitude'),
+                    'birthday': created_driver.get('birthdate'),
+                    'cars': {},
+                    'available': True}
+                drivers.insert(driver_to_insert)
+                return json.loads(dumps(driver_to_insert)), ss_create_driver.status_code, {'Content-type': 'application/json'}
             else:
-                logging.error('Driver already registered id: %s', ss_body['id'])
-                return {'error': 'Driver already registered'}, 400, {'Content-type': 'application/json'}
-        # Devuelvo el error de ss.
-        return ss_body, 400
+                logging.error('Error comunicating with shared-server, status: %s', ss_create_driver.status_code)
+                return {'error': 'Error comunicating with Shared-Server', 'body': json.loads(ss_create_driver.content)}, ss_create_driver.status_code, {'Content-type': 'application/json'}
+        else:
+            logging.error('Driver already registered id: %s', driver['id'])
+            return {'error': 'Driver already registered'}, 400, {'Content-type': 'application/json'}
 
 @api.route('/api/v1/drivers/<string:driver_id>')
 class DriverController(Resource):
