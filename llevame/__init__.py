@@ -159,8 +159,8 @@ class DriversController(Resource):
                 drivers.insert(driver_to_insert)
                 return json.loads(dumps(driver_to_insert)), ss_create_driver.status_code, {'Content-type': 'application/json'}
             else:
-                logging.error('Error comunicating with shared-server, status: %s', ss_create_driver.status_code)
-                return {'error': 'Error comunicating with Shared-Server', 'body': json.loads(ss_create_driver.content)}, ss_create_driver.status_code, {'Content-type': 'application/json'}
+                logging.error('Error communicating with shared-server, status: %s', ss_create_driver.status_code)
+                return {'error': 'Error communicating with Shared-Server', 'body': json.loads(ss_create_driver.content)}, ss_create_driver.status_code, {'Content-type': 'application/json'}
         else:
             logging.error('Driver already registered id: %s', driver['id'])
             return {'error': 'Driver already registered'}, 400, {'Content-type': 'application/json'}
@@ -168,18 +168,66 @@ class DriversController(Resource):
 @api.route('/api/v1/drivers/<string:driver_id>')
 class DriverController(Resource):
     def get(self, driver_id):
-        db_driver = mongo.db.drivers.find_one({'fb_id': driver_id})
+        db_driver = mongo.db.drivers.find_one({'id': driver_id})
         if not db_driver:
             return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
         return json.loads(dumps(db_driver)), 200, {'Content-type': 'application/json'}
 
     @api.expect(driver_update)
     def put(self, driver_id):
-        db_driver = mongo.db.drivers.find_one({'fb_id': driver_id})
+        db_driver = mongo.db.drivers.find_one({'id': driver_id})
         if not db_driver:
             return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
-        mongo.db.drivers.update_one({'fb_id': driver_id}, {'$set': request.get_json()})
-        return json.loads(dumps(mongo.db.drivers.find_one({'fb_id': driver_id}))), 200, {'Content-type': 'application/json'}
+        mongo.db.drivers.update_one({'id': driver_id}, {'$set': request.get_json()})
+        return json.loads(dumps(mongo.db.drivers.find_one({'id': driver_id}))), 200, {'Content-type': 'application/json'}
+
+@api.route('/api/v1/drivers/<string:driver_id>/cars')
+class CarsController(Resource):
+    def get(self, driver_id):
+        db_driver = mongo.db.drivers.find_one({'id': driver_id})
+        if not db_driver:
+            return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
+        return json.loads(dumps(db_driver['cars'])), 200, {'Content-type': 'application/json'}
+
+    @api.expect(car)
+    def post(self, driver_id):
+        db_driver = mongo.db.drivers.find_one({'id': driver_id})
+        if not db_driver:
+            return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
+        ss_body = {
+            "id": db_driver.get('id'),
+            "_ref": db_driver.get('_ref'),
+            "owner": db_driver.get('firstname'),
+            "properties": [
+                {
+                    "name": "brand",
+                    "value": request.json.get('brand')
+                },{
+                    "name": "model",
+                    "value": request.json.get('model')
+                },{
+                    "name": "year",
+                    "value": request.json.get('year')
+                },{
+                    "name": "license_plate",
+                    "value": request.json.get('license_plate')
+                },{
+                    "name": "ac",
+                    "value": request.json.get('ac')
+                }
+            ]
+        }
+        ss_create_driver = requests.post(cache.get('ss-url') + '/api/users', json=ss_body, headers={'token': cache.get('app-token')})
+
+        db_driver['cars'].append({ 'brand': request.json.get('brand'),
+                                   'model': request.json.get('model'),
+                                   'year': request.json.get('year'),
+                                   'license_plate': request.json.get('license_plate'),
+                                   'ac': request.json.get('ac')})
+
+        mongo.db.drivers.update_one({'id': driver_id}, {'$set': db_driver})
+
+        return json.loads(dumps(db_driver)), ss_create_driver.status_code, {'Content-type': 'application/json'}
 
 
 @api.route('/api/v1/passengers')
@@ -231,8 +279,8 @@ class PassengersController(Resource):
                 return json.loads(dumps(passenger_to_insert)), ss_create_passenger.status_code, {
                     'Content-type': 'application/json'}
             else:
-                logging.error('Error comunicating with shared-server, status: %s', ss_create_passenger.status_code)
-                return {'error': 'Error comunicating with Shared-Server',
+                logging.error('Error communicating with shared-server, status: %s', ss_create_passenger.status_code)
+                return {'error': 'Error communicating with Shared-Server',
                         'body': json.loads(ss_create_passenger.content)}, ss_create_passenger.status_code, {
                            'Content-type': 'application/json'}
         else:
