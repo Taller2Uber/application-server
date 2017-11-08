@@ -189,55 +189,73 @@ class PassengersController(Resource):
         db_passengers = dumps(mongo.db.passengers.find())
         return json.loads(db_passengers), 200, {'Content-type': 'application/json'}
 
-    @api.expect(passenger, validate=True)
+    @api.expect(passenger)
     def post(self):
-        # Me quedo con el token
-        fb_token = request.json['fb_token']
-        # Request a facebook
-        fb_response = requests.get(
-            'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,gender').content
-        fb_body = json.loads(fb_response)
-        if 'error' not in fb_body:
-            ss_body = {
-                'username': fb_body.get('name'),
-                "password": "password",
-                "facebookAuthToken": request.json['fb_token']
-            }
-            #ss_request = requests.post(
-            #    cache.get('ss-url') + '/users/validate', data = ss_body)
-            #ss_response = ss_request.json()
-            passengers = mongo.db.passengers
-            passenger = passengers.find_one({'fb_id': fb_body['id']})
-            if not passenger:
-                passenger_to_insert = {'fb_id': fb_body['id'], 'fb_token': fb_token,
-                                             'name': fb_body.get('name'),
-                                             'gender': fb_body.get('gender'),
-                                    'latitude': request.json.get('latitude'),
-                                    'longitude': request.json.get('longitude'),
-                                    'card': request.json.get('card')}
+        passengers = mongo.db.passengers
+        fb_token = request.json.get('fb_token')
+        user_name = request.json.get('user_name')
+        password = request.json.get('password')
+        if fb_token:
+            passenger = passengers.find_one({'fb_token': fb_token})
+        else:
+            passenger = passengers.find_one({'user_name': user_name, 'password': password})
+        if not passenger:
+            ss_create_passenger = requests.post(cache.get('ss-url') + '/api/users', json={
+                'type': 'passenger',
+                'username': user_name or 'default',
+                'password': password or 'default',
+                'fb': {'authToken': fb_token},
+                'firstname': request.json.get('first_name') or 'default',
+                'lastname': request.json.get('last_name') or 'default',
+                'country': request.json.get('country') or 'default',
+                'email': request.json.get('email') or 'default',
+                'birthdate': request.json.get('birthday') or '09-09-1970'
+            }, headers={'token': cache.get('app-token')})
+            if 201 == ss_create_passenger.status_code:
+                json_response = json.loads(ss_create_passenger.content)
+                created_passenger = json_response.get('user')
+                passenger_to_insert = {
+                    'id': created_passenger.get('id'),
+                    '_ref': created_passenger.get('_ref'),
+                    'fb_token': fb_token,
+                    'firstname': created_passenger.get('firstname'),
+                    'lastname': created_passenger.get('lastname'),
+                    'email': created_passenger.get('email'),
+                    'country': created_passenger.get('country'),
+                    'gender': created_passenger.get('gender'),
+                    'latitude': request.json.get('latitude'),
+                    'longitude': request.json.get('longitude'),
+                    'birthday': created_passenger.get('birthdate')
+                    }
                 passengers.insert(passenger_to_insert)
-                return json.loads(dumps(passenger_to_insert)), 201, {'Content-type': 'application/json'}
+                return json.loads(dumps(passenger_to_insert)), ss_create_passenger.status_code, {
+                    'Content-type': 'application/json'}
             else:
-                return {'error': 'Passenger already registered'}, 400, {'Content-type': 'application/json'}
-        # Devuelvo el error de fb.
-        return fb_body, 400
+                logging.error('Error comunicating with shared-server, status: %s', ss_create_passenger.status_code)
+                return {'error': 'Error comunicating with Shared-Server',
+                        'body': json.loads(ss_create_passenger.content)}, ss_create_passenger.status_code, {
+                           'Content-type': 'application/json'}
+        else:
+            logging.error('Passenger already registered id: %s', passenger['id'])
+            return {'error': 'Passenger already registered'}, 400, {'Content-type': 'application/json'}
+
 
 @api.route('/api/v1/passengers/<string:passenger_id>')
 class PassengerController(Resource):
 
     def get(self, passenger_id):
-        db_passenger = mongo.db.passengers.find_one({'fb_id': passenger_id})
+        db_passenger = mongo.db.passengers.find_one({'id': passenger_id})
         if not db_passenger:
             return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
         return json.loads(dumps(db_passenger)), 200, {'Content-type': 'application/json'}
 
     @api.expect(passenger_update)
     def put(self, passenger_id):
-        db_passenger = mongo.db.passengers.find_one({'fb_id': passenger_id})
+        db_passenger = mongo.db.passengers.find_one({'id': passenger_id})
         if not db_passenger:
             return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
-        mongo.db.drivers.update_one({'fb_id': passenger_id}, {'$set': request.get_json()})
-        return json.loads(dumps(mongo.db.drivers.find_one({'fb_id': passenger_id}))), 200, {'Content-type': 'application/json'}
+        mongo.db.drivers.update_one({'id': passenger_id}, {'$set': request.get_json()})
+        return json.loads(dumps(mongo.db.drivers.find_one({'id': passenger_id}))), 200, {'Content-type': 'application/json'}
 
 
 @api.route("/api/v1/users/login")
@@ -255,10 +273,17 @@ class UserLoginController(Resource):
             return {'error': 'Bad Request'}, 400
         ss_response = requests.post(cache.get('ss-url') + '/api/users/validate',
                                     json=body,
-                                    headers={'token': cache.get('app-token')}).content
-        fb_body = json.loads(ss_response)
+                                    headers={'token': cache.get('app-token')})
+        user = json.loads(ss_response.content)
 
-        return fb_body, 200
+        if user.get("type") == "passenger":
+            response = mongo.db.passengers.find_one({'id': user.get("id")})
+        elif user.get("type") == "driver":
+            response = mongo.db.passengers.find_one({'id': user.get("id")})
+
+        response["type"] = user.get("type")
+
+        return json.loads(dumps(response)), ss_response.status_code
 
 if __name__ == "__main__":
     app.run(debug=True)
