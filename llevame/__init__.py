@@ -32,7 +32,14 @@ with open('config.json') as data_file:
     conf = json.load(data_file)
 cache.set('app-token', conf["as_token"])
 cache.set('ss-url', conf["ss_url"])
+cache.set('google-token', conf["google_token"])
 
+coordinates = api.model('Google coordinates', {
+    'latitude_origin': fields.String(required=True, description='Start point latitude'),
+    'longitude_origin': fields.String(required=True, description='Start point longitude'),
+    'latitude_destination': fields.String(required=True, description='End point latitude'),
+    'longitude_destination': fields.String(required=True, description='End point longitude')
+})
 
 user_token = api.model('User token', {
     'fb_token': fields.String(required=True, description='User\s facebook token')
@@ -334,6 +341,19 @@ class UserLoginController(Resource):
             response["type"] = user.get("type")
             return json.loads(dumps(response)), ss_response.status_code
         return json.loads(ss_response.content), ss_response.status_code
+
+@api.route("/api/v1/routes")
+class RoutesController(Resource):
+    @api.expect(coordinates)
+    def post(self):
+        start_coord = request.json.get('latitude_origin') + ',' + request.json.get('longitude_origin')
+        end_coord = request.json.get('latitude_destination') + ',' + request.json.get('longitude_destination')
+        print start_coord
+        if start_coord and end_coord:
+            google_routes = requests.get('https://maps.googleapis.com/maps/api/directions/json?origin=' + start_coord + '&destination=' + end_coord + '&alternatives=true&key=' + cache.get('google-token'))
+            return json.loads(google_routes.content), google_routes.status_code
+        else:
+            return {'error': 'Bad parameters, start and end needed'}, 400, {'Content-type': 'application/json'}
 
 
 if __name__ == "__main__":
