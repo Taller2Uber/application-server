@@ -299,7 +299,6 @@ class PassengersController(Resource):
 class PassengerController(Resource):
 
     def get(self, passenger_id):
-        print (passenger_id)
         db_passenger = mongo.db.passengers.find_one({'ss_id': int(passenger_id)})
 
         if not db_passenger:
@@ -335,9 +334,9 @@ class UserLoginController(Resource):
             user = json.loads(ss_response.content)
 
             if user.get("type") == "passenger":
-                response = mongo.db.passengers.find_one({'ss_id': user.get("id")})
+                response = mongo.db.passengers.find_one({'ss_id': int(user.get("id"))})
             elif user.get("type") == "driver":
-                response = mongo.db.drivers.find_one({'ss_id': user.get("id")})
+                response = mongo.db.drivers.find_one({'ss_id': int(user.get("id"))})
             response["type"] = user.get("type")
             return json.loads(dumps(response)), ss_response.status_code
         return json.loads(ss_response.content), ss_response.status_code
