@@ -30,9 +30,9 @@ mongo = PyMongo(app)
 # Configuraciones Shared Server
 with open('config.json') as data_file:
     conf = json.load(data_file)
-cache.set('app-token', conf["as_token"])
-cache.set('ss-url', conf["ss_url"])
-cache.set('google-token', conf["google_token"])
+app_token = conf["as_token"]
+ss_url = conf["ss_url"]
+google_token =  conf["google_token"]
 
 coordinates = api.model('Google coordinates', {
     'latitude_origin': fields.String(required=True, description='Start point latitude'),
@@ -135,7 +135,7 @@ class DriversController(Resource):
         else:
             driver = drivers.find_one({'user_name': user_name, 'password': password})
         if not driver:
-            ss_create_driver = requests.post(cache.get('ss-url') + '/api/users', json={
+            ss_create_driver = requests.post(ss_url + '/api/users', json={
                 'type': 'driver',
                 'username': user_name or 'default',
                 'password': password or 'default',
@@ -145,7 +145,7 @@ class DriversController(Resource):
                 'country': request.json.get('country') or 'default',
                 'email': request.json.get('email') or 'default',
                 'birthdate': request.json.get('birthday') or '09-09-1970'
-            }, headers={'token': cache.get('app-token')})
+            }, headers={'token': app_token})
             if 201 == ss_create_driver.status_code:
                 json_response = json.loads(ss_create_driver.content)
                 created_driver = json_response.get('user')
@@ -224,7 +224,7 @@ class CarsController(Resource):
                 }
             ]
         }
-        ss_create_car = requests.post(cache.get('ss-url') + '/api/users/' + driver_id + '/cars', json=ss_body, headers={'token': cache.get('app-token')})
+        ss_create_car = requests.post(ss_url + '/api/users/' + driver_id + '/cars', json=ss_body, headers={'token': app_token})
 
         if ss_create_car.status_code == 201:
             db_driver['cars'].append({'brand': request.json.get('brand'),
@@ -255,7 +255,7 @@ class PassengersController(Resource):
         else:
             passenger = passengers.find_one({'user_name': user_name, 'password': password})
         if not passenger:
-            ss_create_passenger = requests.post(cache.get('ss-url') + '/api/users', json={
+            ss_create_passenger = requests.post(ss_url + '/api/users', json={
                 'type': 'passenger',
                 'username': user_name or 'default',
                 'password': password or 'default',
@@ -265,7 +265,7 @@ class PassengersController(Resource):
                 'country': request.json.get('country') or 'default',
                 'email': request.json.get('email') or 'default',
                 'birthdate': request.json.get('birthday') or '09-09-1970'
-            }, headers={'token': cache.get('app-token')})
+            }, headers={'token': app_token})
             if 201 == ss_create_passenger.status_code:
                 json_response = json.loads(ss_create_passenger.content)
                 created_passenger = json_response.get('user')
@@ -328,9 +328,9 @@ class UserLoginController(Resource):
             body = {"username": username, "password": password}
         else:
             return {'error': 'Bad Request'}, 400
-        ss_response = requests.post(cache.get('ss-url') + '/api/users/validate',
+        ss_response = requests.post(ss_url + '/api/users/validate',
                                     json=body,
-                                    headers={'token': cache.get('app-token')})
+                                    headers={'token': app_token})
         if ss_response.status_code == 200 :
             user = json.loads(ss_response.content)
 
@@ -349,7 +349,7 @@ class RoutesController(Resource):
         start_coord = request.json.get('latitude_origin') + ',' + request.json.get('longitude_origin')
         end_coord = request.json.get('latitude_destination') + ',' + request.json.get('longitude_destination')
         if start_coord and end_coord:
-            google_routes = requests.get('https://maps.googleapis.com/maps/api/directions/json?origin=' + start_coord + '&destination=' + end_coord + '&alternatives=true&key=' + cache.get('google-token'))
+            google_routes = requests.get('https://maps.googleapis.com/maps/api/directions/json?origin=' + start_coord + '&destination=' + end_coord + '&alternatives=true&key=' + google_token)
             return json.loads(google_routes.content), google_routes.status_code
         else:
             return {'error': 'Bad parameters, start and end needed'}, 400, {'Content-type': 'application/json'}
