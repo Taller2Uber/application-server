@@ -348,7 +348,6 @@ class RoutesController(Resource):
     def post(self):
         start_coord = request.json.get('latitude_origin') + ',' + request.json.get('longitude_origin')
         end_coord = request.json.get('latitude_destination') + ',' + request.json.get('longitude_destination')
-        print start_coord
         if start_coord and end_coord:
             google_routes = requests.get('https://maps.googleapis.com/maps/api/directions/json?origin=' + start_coord + '&destination=' + end_coord + '&alternatives=true&key=' + cache.get('google-token'))
             return json.loads(google_routes.content), google_routes.status_code
