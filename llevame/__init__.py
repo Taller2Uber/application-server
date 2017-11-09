@@ -185,8 +185,8 @@ class DriverController(Resource):
         db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
         if not db_driver:
             return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
-        mongo.db.drivers.update_one({'ss_id': driver_id}, {'$set': request.get_json()})
-        return json.loads(dumps(mongo.db.drivers.find_one({'ss_id': driver_id}))), 200, {'Content-type': 'application/json'}
+        mongo.db.drivers.update_one({'ss_id': int(driver_id)}, {'$set': request.get_json()})
+        return json.loads(dumps(mongo.db.drivers.find_one({'ss_id': int(driver_id)}))), 200, {'Content-type': 'application/json'}
 
 @api.route('/api/v1/drivers/<string:driver_id>/cars')
 class CarsController(Resource):
@@ -308,11 +308,11 @@ class PassengerController(Resource):
 
     @api.expect(passenger_update)
     def put(self, passenger_id):
-        db_passenger = mongo.db.passengers.find_one({'ss_id': passenger_id})
+        db_passenger = mongo.db.passengers.find_one({'ss_id': int(passenger_id)})
         if not db_passenger:
             return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
-        mongo.db.drivers.update_one({'ss_id': passenger_id}, {'$set': request.get_json()})
-        return json.loads(dumps(mongo.db.drivers.find_one({'ss_id': passenger_id}))), 200, {'Content-type': 'application/json'}
+        mongo.db.passengers.update_one({'ss_id': int(passenger_id)}, {'$set': request.get_json()})
+        return json.loads(dumps(mongo.db.passengers.find_one({'ss_id': int(passenger_id)}))), 200, {'Content-type': 'application/json'}
 
 
 @api.route("/api/v1/users/login")
