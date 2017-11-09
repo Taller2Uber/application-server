@@ -111,10 +111,10 @@ class DriversController(Resource):
     @api.response(200, 'Success')
     def get(self):
         args = driver_parser.parse_args()
-        if args:
-            db_drivers = dumps(mongo.db.drivers.find({'available': args['available']}))
-        else:
+        if args['available'] is None:
             db_drivers = dumps(mongo.db.drivers.find())
+        else:
+            db_drivers = dumps(mongo.db.drivers.find({'available': args['available']}))
         return json.loads(db_drivers), 200, {'Content-type': 'application/json'}
 
     @api.expect(driver)
@@ -143,7 +143,7 @@ class DriversController(Resource):
                 json_response = json.loads(ss_create_driver.content)
                 created_driver = json_response.get('user')
                 driver_to_insert = {
-                    'id': created_driver.get('id'),
+                    'ss_id': created_driver.get('id'),
                     '_ref': created_driver.get('_ref'),
                     'fb_token': fb_token,
                     'firstname': created_driver.get('firstname'),
@@ -154,7 +154,7 @@ class DriversController(Resource):
                     'latitude': request.json.get('latitude'),
                     'longitude': request.json.get('longitude'),
                     'birthday': created_driver.get('birthdate'),
-                    'cars': {},
+                    'cars': [],
                     'available': True}
                 drivers.insert(driver_to_insert)
                 return json.loads(dumps(driver_to_insert)), ss_create_driver.status_code, {'Content-type': 'application/json'}
@@ -162,40 +162,40 @@ class DriversController(Resource):
                 logging.error('Error communicating with shared-server, status: %s', ss_create_driver.status_code)
                 return {'error': 'Error communicating with Shared-Server', 'body': json.loads(ss_create_driver.content)}, ss_create_driver.status_code, {'Content-type': 'application/json'}
         else:
-            logging.error('Driver already registered id: %s', driver['id'])
+            logging.error('Driver already registered id: %s', driver['ss_id'])
             return {'error': 'Driver already registered'}, 400, {'Content-type': 'application/json'}
 
 @api.route('/api/v1/drivers/<string:driver_id>')
 class DriverController(Resource):
     def get(self, driver_id):
-        db_driver = mongo.db.drivers.find_one({'id': driver_id})
+        db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
         if not db_driver:
             return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
         return json.loads(dumps(db_driver)), 200, {'Content-type': 'application/json'}
 
     @api.expect(driver_update)
     def put(self, driver_id):
-        db_driver = mongo.db.drivers.find_one({'id': driver_id})
+        db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
         if not db_driver:
             return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
-        mongo.db.drivers.update_one({'id': driver_id}, {'$set': request.get_json()})
-        return json.loads(dumps(mongo.db.drivers.find_one({'id': driver_id}))), 200, {'Content-type': 'application/json'}
+        mongo.db.drivers.update_one({'ss_id': driver_id}, {'$set': request.get_json()})
+        return json.loads(dumps(mongo.db.drivers.find_one({'ss_id': driver_id}))), 200, {'Content-type': 'application/json'}
 
 @api.route('/api/v1/drivers/<string:driver_id>/cars')
 class CarsController(Resource):
     def get(self, driver_id):
-        db_driver = mongo.db.drivers.find_one({'id': driver_id})
+        db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
         if not db_driver:
             return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
         return json.loads(dumps(db_driver['cars'])), 200, {'Content-type': 'application/json'}
 
     @api.expect(car)
     def post(self, driver_id):
-        db_driver = mongo.db.drivers.find_one({'id': driver_id})
+        db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
         if not db_driver:
             return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
         ss_body = {
-            "id": db_driver.get('id'),
+            "id": db_driver.get('ss_id'),
             "_ref": db_driver.get('_ref'),
             "owner": db_driver.get('firstname'),
             "properties": [
@@ -217,18 +217,18 @@ class CarsController(Resource):
                 }
             ]
         }
-        ss_create_driver = requests.post(cache.get('ss-url') + '/api/users', json=ss_body, headers={'token': cache.get('app-token')})
+        ss_create_car = requests.post(cache.get('ss-url') + '/api/users/' + driver_id + '/cars', json=ss_body, headers={'token': cache.get('app-token')})
 
-        db_driver['cars'].append({ 'brand': request.json.get('brand'),
-                                   'model': request.json.get('model'),
-                                   'year': request.json.get('year'),
-                                   'license_plate': request.json.get('license_plate'),
-                                   'ac': request.json.get('ac')})
-
-        mongo.db.drivers.update_one({'id': driver_id}, {'$set': db_driver})
-
-        return json.loads(dumps(db_driver)), ss_create_driver.status_code, {'Content-type': 'application/json'}
-
+        if ss_create_car.status_code == 201:
+            db_driver['cars'].append({'brand': request.json.get('brand'),
+                                       'model': request.json.get('model'),
+                                       'year': request.json.get('year'),
+                                       'license_plate': request.json.get('license_plate'),
+                                       'ac': request.json.get('ac')})
+            mongo.db.drivers.update_one({'ss_id': int(driver_id)}, {'$set': {'cars': db_driver['cars']}})
+            return json.loads(dumps(db_driver)), ss_create_car.status_code, {'Content-type': 'application/json'}
+        else:
+            return json.loads(ss_create_car.content), ss_create_car.status_code, {'Content-type': 'application/json'}
 
 @api.route('/api/v1/passengers')
 class PassengersController(Resource):
@@ -263,7 +263,7 @@ class PassengersController(Resource):
                 json_response = json.loads(ss_create_passenger.content)
                 created_passenger = json_response.get('user')
                 passenger_to_insert = {
-                    'id': created_passenger.get('id'),
+                    'ss_id': created_passenger.get('id'),
                     '_ref': created_passenger.get('_ref'),
                     'fb_token': fb_token,
                     'firstname': created_passenger.get('firstname'),
@@ -284,7 +284,7 @@ class PassengersController(Resource):
                         'body': json.loads(ss_create_passenger.content)}, ss_create_passenger.status_code, {
                            'Content-type': 'application/json'}
         else:
-            logging.error('Passenger already registered id: %s', passenger['id'])
+            logging.error('Passenger already registered id: %s', passenger['ss_id'])
             return {'error': 'Passenger already registered'}, 400, {'Content-type': 'application/json'}
 
 
@@ -292,18 +292,20 @@ class PassengersController(Resource):
 class PassengerController(Resource):
 
     def get(self, passenger_id):
-        db_passenger = mongo.db.passengers.find_one({'id': passenger_id})
+        print (passenger_id)
+        db_passenger = mongo.db.passengers.find_one({'ss_id': int(passenger_id)})
+
         if not db_passenger:
             return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
         return json.loads(dumps(db_passenger)), 200, {'Content-type': 'application/json'}
 
     @api.expect(passenger_update)
     def put(self, passenger_id):
-        db_passenger = mongo.db.passengers.find_one({'id': passenger_id})
+        db_passenger = mongo.db.passengers.find_one({'ss_id': passenger_id})
         if not db_passenger:
             return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
-        mongo.db.drivers.update_one({'id': passenger_id}, {'$set': request.get_json()})
-        return json.loads(dumps(mongo.db.drivers.find_one({'id': passenger_id}))), 200, {'Content-type': 'application/json'}
+        mongo.db.drivers.update_one({'ss_id': passenger_id}, {'$set': request.get_json()})
+        return json.loads(dumps(mongo.db.drivers.find_one({'ss_id': passenger_id}))), 200, {'Content-type': 'application/json'}
 
 
 @api.route("/api/v1/users/login")
@@ -322,16 +324,17 @@ class UserLoginController(Resource):
         ss_response = requests.post(cache.get('ss-url') + '/api/users/validate',
                                     json=body,
                                     headers={'token': cache.get('app-token')})
-        user = json.loads(ss_response.content)
+        if ss_response.status_code == 200 :
+            user = json.loads(ss_response.content)
 
-        if user.get("type") == "passenger":
-            response = mongo.db.passengers.find_one({'id': user.get("id")})
-        elif user.get("type") == "driver":
-            response = mongo.db.passengers.find_one({'id': user.get("id")})
+            if user.get("type") == "passenger":
+                response = mongo.db.passengers.find_one({'ss_id': user.get("id")})
+            elif user.get("type") == "driver":
+                response = mongo.db.drivers.find_one({'ss_id': user.get("id")})
+            response["type"] = user.get("type")
+            return json.loads(dumps(response)), ss_response.status_code
+        return json.loads(ss_response.content), ss_response.status_code
 
-        response["type"] = user.get("type")
-
-        return json.loads(dumps(response)), ss_response.status_code
 
 if __name__ == "__main__":
     app.run(debug=True)
