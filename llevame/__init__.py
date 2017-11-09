@@ -6,13 +6,13 @@ from flask_restful.inputs import boolean
 from flask_restplus import Resource, Api, fields
 from flask_pymongo import PyMongo
 import logging
-from flask_api import status
+import json
 from werkzeug.contrib.cache import SimpleCache
 
 # Configuro el cache
 cache = SimpleCache()
 # Configuracion de logs
-logging.basicConfig(filename='example.log', level=logging.ERROR, format='%(asctime)s %(message)s',
+logging.basicConfig(filename='application.log', level=logging.ERROR, format='%(asctime)s %(message)s',
                     datefmt='%m/%d/%Y %I:%M:%S %p')
 
 app = Flask(__name__)
@@ -28,8 +28,11 @@ app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
 # Configuraciones Shared Server
-SS_URL = 'http://172.20.10.3:3000'
-app_body = { 'id': 1 }
+with open('config.json') as data_file:
+    conf = json.load(data_file)
+cache.set('app-token', conf["as_token"])
+cache.set('ss-url', conf["ss_url"])
+
 
 user_token = api.model('User token', {
     'fb_token': fields.String(required=True, description='User\s facebook token')
@@ -102,103 +105,130 @@ def get_cache(str):
 
 ########################
 
-@api.route('/api/v1/ss/init')
-class SSController(Resource):
-
-    def post(self):
-        # Agarro el id del body
-        as_id = request.json['id']
-        if not as_id:
-            return {'error': 'Server not initialized'}, 400, {'Content-type': 'application/json'}
-        else:
-            # Request a facebook
-            body = {'id': as_id}
-            ss_response = requests.post(SS_URL + '/servers/ping', data=body)
-            ss_body_response = ss_response.json()
-            if ss_body_response['token']:
-                AS_SS_ID = as_id
-                SS_TOKEN = ss_body_response['token']
-                print SS_TOKEN
-            return {'message': 'App-Server initialized correctly'}, 200, {'Content-type': 'application/json'}
-
 
 @api.route('/api/v1/drivers')
 class DriversController(Resource):
     @api.response(200, 'Success')
     def get(self):
         args = driver_parser.parse_args()
-        if args:
-            db_drivers = dumps(mongo.db.drivers.find({'available': args['available']}))
-        else:
+        if args['available'] is None:
             db_drivers = dumps(mongo.db.drivers.find())
+        else:
+            db_drivers = dumps(mongo.db.drivers.find({'available': args['available']}))
         return json.loads(db_drivers), 200, {'Content-type': 'application/json'}
 
-    @api.expect(driver, validate=True)
+    @api.expect(driver)
     def post(self):
+        drivers = mongo.db.drivers
         fb_token = request.json.get('fb_token')
-        ss_response = requests.post(SS_URL + '/users/validate', json={'facebookAuthToken': fb_token}, headers={'ApplicationToken': cache.get('app-token')})
-        if 401 == ss_response.status_code:
-            logging.error('Aplicacion desautorizada, intentando loguearse ...')
-            ss_ping = requests.post(SS_URL + '/servers/ping', json=app_body, headers={'ApplicationToken': cache.get('app-token')})
-            if 200 == ss_ping.status_code:
-                logging.info('Aplicacion logueada correctamente')
-                ss_app_data = json.loads(ss_ping.content)
-                cache.set('app-token', ss_app_data['token'])
-                ss_response = requests.post(SS_URL + '/users/validate', json={'facebookAuthToken': fb_token},headers={'ApplicationToken': cache.get('app-token')})
+        user_name = request.json.get('user_name')
+        password = request.json.get('password')
+        if fb_token:
+            driver = drivers.find_one({'fb_token': fb_token})
+        else:
+            driver = drivers.find_one({'user_name': user_name, 'password': password})
+        if not driver:
+            ss_create_driver = requests.post(cache.get('ss-url') + '/api/users', json={
+                'type': 'driver',
+                'username': user_name or 'default',
+                'password': password or 'default',
+                'fb': {'authToken': fb_token},
+                'firstname': request.json.get('first_name') or 'default',
+                'lastname': request.json.get('last_name') or 'default',
+                'country': request.json.get('country') or 'default',
+                'email': request.json.get('email') or 'default',
+                'birthdate': request.json.get('birthday') or '09-09-1970'
+            }, headers={'token': cache.get('app-token')})
+            if 201 == ss_create_driver.status_code:
+                json_response = json.loads(ss_create_driver.content)
+                created_driver = json_response.get('user')
+                driver_to_insert = {
+                    'ss_id': created_driver.get('id'),
+                    '_ref': created_driver.get('_ref'),
+                    'fb_token': fb_token,
+                    'firstname': created_driver.get('firstname'),
+                    'lastname': created_driver.get('lastname'),
+                    'email': created_driver.get('email'),
+                    'country': created_driver.get('country'),
+                    'gender': created_driver.get('gender'),
+                    'latitude': request.json.get('latitude'),
+                    'longitude': request.json.get('longitude'),
+                    'birthday': created_driver.get('birthdate'),
+                    'cars': [],
+                    'available': True}
+                drivers.insert(driver_to_insert)
+                return json.loads(dumps(driver_to_insert)), ss_create_driver.status_code, {'Content-type': 'application/json'}
             else:
-                return {'error': 'Error comunicating with Shared-Server'}, ss_ping.status_code, {'Content-type': 'application/json'}
-
-        ss_body = json.loads(ss_response.content)
-        if 'error' not in ss_body:
-            drivers = mongo.db.drivers
-            driver = drivers.find_one({'fb_id': ss_body['id']})
-            if not driver:
-                ss_create_driver = requests.post(SS_URL + '/users', json={
-                    'type': 'driver',
-                    'username': 'default',
-                    'password': 'default',
-                    'fb': { 'userId': ss_body['id'], 'authToken': fb_token},
-                    'firstname': ss_body['name'],
-                    'lastname': 'default',
-                    'country': 'default',
-                    'email': 'default',
-                    'birthdate': '1992-09-15'
-                }, headers={'ApplicationToken': cache.get('app-token')})
-                if 201 == ss_create_driver.status_code:
-                    driver_to_insert = {'fb_id':ss_body['id'], 'fb_token': fb_token,
-                        'name': ss_body.get('name'),
-                        'gender': ss_body.get('gender'),
-                        'latitude': request.json.get('latitude'),
-                        'longitude': request.json.get('longitude'),
-                        'cars': request.json.get('cars'),
-                        'available': True}
-                    drivers.insert(driver_to_insert)
-                    return json.loads(dumps(driver_to_insert)), 201, {'Content-type': 'application/json'}
-                else:
-                    logging.error('Error comunicating with shared-server, status: %s', ss_create_driver.status_code)
-                    return {'error': 'Error comunicating with Shared-Server'}, ss_create_driver.status_code, {'Content-type': 'application/json'}
-            else:
-                logging.error('Driver already registered id: %s', ss_body['id'])
-                return {'error': 'Driver already registered'}, 400, {'Content-type': 'application/json'}
-        # Devuelvo el error de ss.
-        return ss_body, 400
+                logging.error('Error communicating with shared-server, status: %s', ss_create_driver.status_code)
+                return {'error': 'Error communicating with Shared-Server', 'body': json.loads(ss_create_driver.content)}, ss_create_driver.status_code, {'Content-type': 'application/json'}
+        else:
+            logging.error('Driver already registered id: %s', driver['ss_id'])
+            return {'error': 'Driver already registered'}, 400, {'Content-type': 'application/json'}
 
 @api.route('/api/v1/drivers/<string:driver_id>')
 class DriverController(Resource):
     def get(self, driver_id):
-        db_driver = mongo.db.drivers.find_one({'fb_id': driver_id})
+        db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
         if not db_driver:
             return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
         return json.loads(dumps(db_driver)), 200, {'Content-type': 'application/json'}
 
     @api.expect(driver_update)
     def put(self, driver_id):
-        db_driver = mongo.db.drivers.find_one({'fb_id': driver_id})
+        db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
         if not db_driver:
             return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
-        mongo.db.drivers.update_one({'fb_id': driver_id}, {'$set': request.get_json()})
-        return json.loads(dumps(mongo.db.drivers.find_one({'fb_id': driver_id}))), 200, {'Content-type': 'application/json'}
+        mongo.db.drivers.update_one({'ss_id': driver_id}, {'$set': request.get_json()})
+        return json.loads(dumps(mongo.db.drivers.find_one({'ss_id': driver_id}))), 200, {'Content-type': 'application/json'}
 
+@api.route('/api/v1/drivers/<string:driver_id>/cars')
+class CarsController(Resource):
+    def get(self, driver_id):
+        db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
+        if not db_driver:
+            return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
+        return json.loads(dumps(db_driver['cars'])), 200, {'Content-type': 'application/json'}
+
+    @api.expect(car)
+    def post(self, driver_id):
+        db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
+        if not db_driver:
+            return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
+        ss_body = {
+            "id": db_driver.get('ss_id'),
+            "_ref": db_driver.get('_ref'),
+            "owner": db_driver.get('firstname'),
+            "properties": [
+                {
+                    "name": "brand",
+                    "value": request.json.get('brand')
+                },{
+                    "name": "model",
+                    "value": request.json.get('model')
+                },{
+                    "name": "year",
+                    "value": request.json.get('year')
+                },{
+                    "name": "license_plate",
+                    "value": request.json.get('license_plate')
+                },{
+                    "name": "ac",
+                    "value": request.json.get('ac')
+                }
+            ]
+        }
+        ss_create_car = requests.post(cache.get('ss-url') + '/api/users/' + driver_id + '/cars', json=ss_body, headers={'token': cache.get('app-token')})
+
+        if ss_create_car.status_code == 201:
+            db_driver['cars'].append({'brand': request.json.get('brand'),
+                                       'model': request.json.get('model'),
+                                       'year': request.json.get('year'),
+                                       'license_plate': request.json.get('license_plate'),
+                                       'ac': request.json.get('ac')})
+            mongo.db.drivers.update_one({'ss_id': int(driver_id)}, {'$set': {'cars': db_driver['cars']}})
+            return json.loads(dumps(db_driver)), ss_create_car.status_code, {'Content-type': 'application/json'}
+        else:
+            return json.loads(ss_create_car.content), ss_create_car.status_code, {'Content-type': 'application/json'}
 
 @api.route('/api/v1/passengers')
 class PassengersController(Resource):
@@ -207,82 +237,104 @@ class PassengersController(Resource):
         db_passengers = dumps(mongo.db.passengers.find())
         return json.loads(db_passengers), 200, {'Content-type': 'application/json'}
 
-    @api.expect(passenger, validate=True)
+    @api.expect(passenger)
     def post(self):
-        # Me quedo con el token
-        fb_token = request.json['fb_token']
-        # Request a facebook
-        fb_response = requests.get(
-            'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name,gender').content
-        fb_body = json.loads(fb_response)
-        if 'error' not in fb_body:
-            ss_body = {
-                'username': fb_body.get('name'),
-                "password": "password",
-                "facebookAuthToken": request.json['fb_token']
-            }
-            #ss_request = requests.post(
-            #    SS_URL + '/users/validate', data = ss_body)
-            #ss_response = ss_request.json()
-            passengers = mongo.db.passengers
-            passenger = passengers.find_one({'fb_id': fb_body['id']})
-            if not passenger:
-                passenger_to_insert = {'fb_id': fb_body['id'], 'fb_token': fb_token,
-                                             'name': fb_body.get('name'),
-                                             'gender': fb_body.get('gender'),
-                                    'latitude': request.json.get('latitude'),
-                                    'longitude': request.json.get('longitude'),
-                                    'card': request.json.get('card')}
+        passengers = mongo.db.passengers
+        fb_token = request.json.get('fb_token')
+        user_name = request.json.get('user_name')
+        password = request.json.get('password')
+        if fb_token:
+            passenger = passengers.find_one({'fb_token': fb_token})
+        else:
+            passenger = passengers.find_one({'user_name': user_name, 'password': password})
+        if not passenger:
+            ss_create_passenger = requests.post(cache.get('ss-url') + '/api/users', json={
+                'type': 'passenger',
+                'username': user_name or 'default',
+                'password': password or 'default',
+                'fb': {'authToken': fb_token},
+                'firstname': request.json.get('first_name') or 'default',
+                'lastname': request.json.get('last_name') or 'default',
+                'country': request.json.get('country') or 'default',
+                'email': request.json.get('email') or 'default',
+                'birthdate': request.json.get('birthday') or '09-09-1970'
+            }, headers={'token': cache.get('app-token')})
+            if 201 == ss_create_passenger.status_code:
+                json_response = json.loads(ss_create_passenger.content)
+                created_passenger = json_response.get('user')
+                passenger_to_insert = {
+                    'ss_id': created_passenger.get('id'),
+                    '_ref': created_passenger.get('_ref'),
+                    'fb_token': fb_token,
+                    'firstname': created_passenger.get('firstname'),
+                    'lastname': created_passenger.get('lastname'),
+                    'email': created_passenger.get('email'),
+                    'country': created_passenger.get('country'),
+                    'gender': created_passenger.get('gender'),
+                    'latitude': request.json.get('latitude'),
+                    'longitude': request.json.get('longitude'),
+                    'birthday': created_passenger.get('birthdate')
+                    }
                 passengers.insert(passenger_to_insert)
-                return json.loads(dumps(passenger_to_insert)), 201, {'Content-type': 'application/json'}
+                return json.loads(dumps(passenger_to_insert)), ss_create_passenger.status_code, {
+                    'Content-type': 'application/json'}
             else:
-                return {'error': 'Passenger already registered'}, 400, {'Content-type': 'application/json'}
-        # Devuelvo el error de fb.
-        return fb_body, 400
+                logging.error('Error communicating with shared-server, status: %s', ss_create_passenger.status_code)
+                return {'error': 'Error communicating with Shared-Server',
+                        'body': json.loads(ss_create_passenger.content)}, ss_create_passenger.status_code, {
+                           'Content-type': 'application/json'}
+        else:
+            logging.error('Passenger already registered id: %s', passenger['ss_id'])
+            return {'error': 'Passenger already registered'}, 400, {'Content-type': 'application/json'}
+
 
 @api.route('/api/v1/passengers/<string:passenger_id>')
 class PassengerController(Resource):
 
     def get(self, passenger_id):
-        db_passenger = mongo.db.passengers.find_one({'fb_id': passenger_id})
+        print (passenger_id)
+        db_passenger = mongo.db.passengers.find_one({'ss_id': int(passenger_id)})
+
         if not db_passenger:
             return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
         return json.loads(dumps(db_passenger)), 200, {'Content-type': 'application/json'}
 
     @api.expect(passenger_update)
     def put(self, passenger_id):
-        db_passenger = mongo.db.passengers.find_one({'fb_id': passenger_id})
+        db_passenger = mongo.db.passengers.find_one({'ss_id': passenger_id})
         if not db_passenger:
             return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
-        mongo.db.drivers.update_one({'fb_id': passenger_id}, {'$set': request.get_json()})
-        return json.loads(dumps(mongo.db.drivers.find_one({'fb_id': passenger_id}))), 200, {'Content-type': 'application/json'}
+        mongo.db.drivers.update_one({'ss_id': passenger_id}, {'$set': request.get_json()})
+        return json.loads(dumps(mongo.db.drivers.find_one({'ss_id': passenger_id}))), 200, {'Content-type': 'application/json'}
 
 
 @api.route("/api/v1/users/login")
 class UserLoginController(Resource):
-    @api.expect(user_token, validate=True)
+    @api.expect(user_token)
     def post(self):
-        # Me quedo con el token
-        fb_token = request.json['fb_token']
-        if not fb_token:
-            return 'Token not found', 400
-        # Request a facebook
-        fb_response = requests.get('https://graph.facebook.com/me?access_token=' + fb_token).content
-        fb_body = json.loads(fb_response)
-        if 'error' not in fb_body:
-            passengers = mongo.db.passengers
-            passenger = passengers.find_one({'fb_id': fb_body['id']})
-            if not passenger:
-                drivers = mongo.db.drivers
-                driver = drivers.find_one({'fb_id': fb_body['id']})
-                if not driver:
-                    return 'User not registered', 400
-                else:
-                    return json.loads(dumps(driver)), 200, {'Content-type': 'application/json'}
-            else:
-                return json.loads(dumps(passenger)), 200, {'Content-type': 'application/json'}
-        # Devuelvo error de facebook.
-        return fb_body, 400
+        fb_token = request.json.get('fb_token')
+        username = request.json.get('username')
+        password = request.json.get('password')
+        if fb_token and not username and not password:
+            body = {"facebookAuthToken": fb_token}
+        elif not fb_token and username and password:
+            body = {"username": username, "password": password}
+        else:
+            return {'error': 'Bad Request'}, 400
+        ss_response = requests.post(cache.get('ss-url') + '/api/users/validate',
+                                    json=body,
+                                    headers={'token': cache.get('app-token')})
+        if ss_response.status_code == 200 :
+            user = json.loads(ss_response.content)
+
+            if user.get("type") == "passenger":
+                response = mongo.db.passengers.find_one({'ss_id': user.get("id")})
+            elif user.get("type") == "driver":
+                response = mongo.db.drivers.find_one({'ss_id': user.get("id")})
+            response["type"] = user.get("type")
+            return json.loads(dumps(response)), ss_response.status_code
+        return json.loads(ss_response.content), ss_response.status_code
+
 
 if __name__ == "__main__":
     app.run(debug=True)
