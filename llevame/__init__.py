@@ -130,8 +130,17 @@ class DriversController(Resource):
         fb_token = request.json.get('fb_token')
         user_name = request.json.get('user_name')
         password = request.json.get('password')
+        fb_id = ''
+        driver = None
         if fb_token:
-            driver = drivers.find_one({'fb_token': fb_token})
+            fb_response = requests.get(
+                'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name').content
+            fb_body = json.loads(fb_response)
+            if 'error' not in fb_body:
+                fb_id = fb_body.get("id")
+                driver = drivers.find_one({'fb_id': fb_id})
+            else:
+                return fb_body, 400
         else:
             driver = drivers.find_one({'user_name': user_name, 'password': password})
         if not driver:
@@ -139,7 +148,8 @@ class DriversController(Resource):
                 'type': 'driver',
                 'username': user_name or 'default',
                 'password': password or 'default',
-                'fb': {'authToken': fb_token},
+                'fb': {'authToken': fb_token,
+                       'userid': fb_id},
                 'firstname': request.json.get('first_name') or 'default',
                 'lastname': request.json.get('last_name') or 'default',
                 'country': request.json.get('country') or 'default',
@@ -152,7 +162,7 @@ class DriversController(Resource):
                 driver_to_insert = {
                     'ss_id': created_driver.get('id'),
                     '_ref': created_driver.get('_ref'),
-                    'fb_token': fb_token,
+                    'fb_id': fb_id,
                     'firstname': created_driver.get('firstname'),
                     'lastname': created_driver.get('lastname'),
                     'email': created_driver.get('email'),
@@ -250,8 +260,19 @@ class PassengersController(Resource):
         fb_token = request.json.get('fb_token')
         user_name = request.json.get('user_name')
         password = request.json.get('password')
+        fb_id = ''
+        passenter = None
         if fb_token:
-            passenger = passengers.find_one({'fb_token': fb_token})
+            fb_response = requests.get(
+                'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name').content
+            fb_body = json.loads(fb_response)
+            if 'error' not in fb_body:
+                fb_id = fb_body.get("id")
+                passenger = passengers.find_one({'fb_id': fb_id})
+            else:
+                return fb_body, 400
+        if fb_token:
+            passenger = passengers.find_one({'fb_id': fb_id})
         else:
             passenger = passengers.find_one({'user_name': user_name, 'password': password})
         if not passenger:
@@ -259,7 +280,8 @@ class PassengersController(Resource):
                 'type': 'passenger',
                 'username': user_name or 'default',
                 'password': password or 'default',
-                'fb': {'authToken': fb_token},
+                'fb': {'authToken': fb_id,
+                       'userid': fb_id},
                 'firstname': request.json.get('first_name') or 'default',
                 'lastname': request.json.get('last_name') or 'default',
                 'country': request.json.get('country') or 'default',
@@ -272,7 +294,7 @@ class PassengersController(Resource):
                 passenger_to_insert = {
                     'ss_id': created_passenger.get('id'),
                     '_ref': created_passenger.get('_ref'),
-                    'fb_token': fb_token,
+                    'fb_id': fb_id,
                     'firstname': created_passenger.get('firstname'),
                     'lastname': created_passenger.get('lastname'),
                     'email': created_passenger.get('email'),
@@ -319,7 +341,7 @@ class UserLoginController(Resource):
     @api.expect(user_token)
     def post(self):
         fb_token = request.json.get('fb_token')
-        username = request.json.get('username')
+        username = request.json.get('user_name')
         password = request.json.get('password')
         if fb_token and not username and not password:
             body = {"facebookAuthToken": fb_token}
@@ -332,12 +354,15 @@ class UserLoginController(Resource):
                                     headers={'token': app_token})
         if ss_response.status_code == 200 :
             user = json.loads(ss_response.content)
-
-            if user.get("type") == "passenger":
-                response = mongo.db.passengers.find_one({'ss_id': int(user.get("id"))})
-            elif user.get("type") == "driver":
-                response = mongo.db.drivers.find_one({'ss_id': int(user.get("id"))})
-            response["type"] = user.get("type")
+            response = {}
+            if user.get("user"):
+                id = user.get("user").get("id")
+                if id:
+                    if user.get("user").get("type") == "passenger":
+                        response = mongo.db.passengers.find_one({'ss_id': int(id)})
+                    elif user.get("user").get("type") == "driver":
+                        response = mongo.db.drivers.find_one({'ss_id': int(id)})
+                    response["type"] = user.get("user").get("type")
             return json.loads(dumps(response)), ss_response.status_code
         return json.loads(ss_response.content), ss_response.status_code
 
