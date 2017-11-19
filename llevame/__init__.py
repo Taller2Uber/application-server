@@ -130,6 +130,7 @@ class DriversController(Resource):
         fb_token = request.json.get('fb_token')
         user_name = request.json.get('user_name')
         password = request.json.get('password')
+        firebase_token = request.json.get('firebase_token')
         fb_id = ''
         driver = None
         if fb_token:
@@ -163,6 +164,7 @@ class DriversController(Resource):
                     'ss_id': created_driver.get('id'),
                     '_ref': created_driver.get('_ref'),
                     'fb_id': fb_id,
+                    'firebase_token': firebase_token,
                     'firstname': created_driver.get('firstname'),
                     'lastname': created_driver.get('lastname'),
                     'email': created_driver.get('email'),
@@ -260,8 +262,9 @@ class PassengersController(Resource):
         fb_token = request.json.get('fb_token')
         user_name = request.json.get('user_name')
         password = request.json.get('password')
+        firebase_token = request.json.get('firebase_token')
         fb_id = ''
-        passenter = None
+        passenger = None
         if fb_token:
             fb_response = requests.get(
                 'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name').content
@@ -280,7 +283,7 @@ class PassengersController(Resource):
                 'type': 'passenger',
                 'username': user_name or 'default',
                 'password': password or 'default',
-                'fb': {'authToken': fb_id,
+                'fb': {'authToken': fb_token,
                        'userid': fb_id},
                 'firstname': request.json.get('first_name') or 'default',
                 'lastname': request.json.get('last_name') or 'default',
@@ -295,6 +298,7 @@ class PassengersController(Resource):
                     'ss_id': created_passenger.get('id'),
                     '_ref': created_passenger.get('_ref'),
                     'fb_id': fb_id,
+                    'firebase_token': firebase_token,
                     'firstname': created_passenger.get('firstname'),
                     'lastname': created_passenger.get('lastname'),
                     'email': created_passenger.get('email'),
