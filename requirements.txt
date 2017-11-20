@@ -35,3 +35,4 @@ typing==3.6.2
 urllib3==1.22
 Werkzeug==0.12.2
 bson==0.5.0
+pyfcm

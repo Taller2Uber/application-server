@@ -6,12 +6,11 @@ from flask_restful.inputs import boolean
 from flask_restplus import Resource, Api, fields
 from flask_pymongo import PyMongo
 from bson.objectid import ObjectId
+from pyfcm import FCMNotification
 import logging
 import json
 from werkzeug.contrib.cache import SimpleCache
 
-# Configuro el cache
-cache = SimpleCache()
 # Configuracion de logs
 logging.basicConfig(filename='application.log', level=logging.ERROR, format='%(asctime)s %(message)s',
                     datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -34,6 +33,9 @@ with open('config.json') as data_file:
 app_token = conf["as_token"]
 ss_url = conf["ss_url"]
 google_token =  conf["google_token"]
+
+push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
+
 
 coordinates = api.model('Google coordinates', {
     'latitude_origin': fields.String(required=True, description='Start point latitude'),
@@ -454,7 +456,7 @@ class RoutesController(Resource):
 class RoutesController(Resource):
     @api.expect(coordinates)
     def post(self, route_id):
-        try:
+        
             driver_id = request.json.get('driver_id')
             if driver_id:
                 driver = mongo.db.drivers.find_one({'ss_id': driver_id})
@@ -464,8 +466,10 @@ class RoutesController(Resource):
                         mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"driver_id": driver_id, "status": "ON MY WAY"}})
                         #notificacion firebase a passenger
                         passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
-                        print(passenger_token)
 
+                        message_title = "Llevame"
+                        message_body = "Tu viaje ha sido confirmado"
+                        result = push_service.notify_single_device(registration_id=passenger_token, message_title=message_title, message_body=message_body)
 
                         route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
                         return json.loads(dumps(route_to_request)), 200
@@ -475,8 +479,7 @@ class RoutesController(Resource):
                     return {'error': 'Conductor inexistente.'}, 500, {'Content-type': 'application/json'}
             else:
                 return {'error': 'Bad parameters, driver_id needed'}, 400, {'Content-type': 'application/json'}
-        except:
-            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
+
 
 
 if __name__ == "__main__":
