@@ -378,7 +378,10 @@ class RoutesController(Resource):
         end_coord = request.json.get('latitude_destination') + ',' + request.json.get('longitude_destination')
         if start_coord and end_coord:
             google_routes = requests.get('https://maps.googleapis.com/maps/api/directions/json?origin=' + start_coord + '&destination=' + end_coord + '&alternatives=true&key=' + google_token)
-            return json.loads(google_routes.content), google_routes.status_code
+            response = json.loads(google_routes.content)
+            response["estimated_price"] = 50
+
+            return response, google_routes.status_code
         else:
             return {'error': 'Bad parameters, start and end needed'}, 400, {'Content-type': 'application/json'}
 
