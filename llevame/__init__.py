@@ -448,6 +448,7 @@ class PassengerController(Resource):
 
 @api.route("/api/v1/users/login")
 class UserLoginController(Resource):
+
     @api.expect(user_token)
     def post(self):
         try:
@@ -486,16 +487,45 @@ class RoutesController(Resource):
     @requires_auth
     def post(self):
         try:
+            passenger_id = request.json.get('passenger_id')
             start_coord = request.json.get('latitude_origin') + ',' + request.json.get('longitude_origin')
             end_coord = request.json.get('latitude_destination') + ',' + request.json.get('longitude_destination')
-            if start_coord and end_coord:
+            if passenger_id and start_coord and end_coord:
                 google_routes = requests.get('https://maps.googleapis.com/maps/api/directions/json?origin=' + start_coord + '&destination=' + end_coord + '&alternatives=true&key=' + google_token)
                 response = json.loads(google_routes.content)
-                response["estimated_price"] = 50
-
-                return response, google_routes.status_code
+                if google_routes.status_code == 200:
+                    ss_estimated_price = requests.post(ss_url + '/api/trips/estimate', json={
+                              "passenger": passenger_id,
+                              "start": {
+                                "address": {
+                                  "location": {
+                                    "lat": request.json.get('latitude_origin'),
+                                    "lon": request.json.get('longitude_origin')
+                                  }
+                                },
+                                "timestamp": 0
+                              },
+                              "end": {
+                                "address": {
+                                  "location": {
+                                    "lat": request.json.get('latitude_destination'),
+                                    "lon": request.json.get('longitude_destination')
+                                  }
+                                }
+                              },
+                              "cost": {
+                                "currency": "ARS"
+                              }
+                        }, headers={'token': app_token})
+                    if ss_estimated_price.status_code == 200:
+                        response["estimated_price"] = json.loads(ss_estimated_price.content).get('cost').get('value')
+                        return response, 200
+                    else:
+                        return json.loads(ss_estimated_price.content), ss_estimated_price.status_code
+                else:
+                    return response, google_routes.status_code
             else:
-                return {'error': 'Bad parameters, start and end needed'}, 400, {'Content-type': 'application/json'}
+                return {'error': 'Bad parameters, passenger, start and end needed'}, 400, {'Content-type': 'application/json'}
         except:
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
@@ -540,29 +570,28 @@ class RoutesController(Resource):
     @api.expect(coordinates)
     @requires_auth
     def post(self, route_id):
-        
-            driver_id = request.json.get('driver_id')
-            if driver_id:
-                driver = mongo.db.drivers.find_one({'ss_id': driver_id})
-                if driver:
-                    route_to_request = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
-                    if route_to_request:
-                        mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"driver_id": driver_id, "status": "ON MY WAY"}})
-                        #notificacion firebase a passenger
-                        passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
+        driver_id = request.json.get('driver_id')
+        if driver_id:
+            driver = mongo.db.drivers.find_one({'ss_id': driver_id})
+            if driver:
+                route_to_request = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
+                if route_to_request:
+                    mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"driver_id": driver_id, "status": "ON MY WAY"}})
+                    #notificacion firebase a passenger
+                    passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
 
-                        message_title = "Llevame"
-                        message_body = "Tu viaje ha sido confirmado"
-                        result = push_service.notify_single_device(registration_id=passenger_token, message_title=message_title, message_body=message_body)
+                    message_title = "Llevame"
+                    message_body = "Tu viaje ha sido confirmado"
+                    result = push_service.notify_single_device(registration_id=passenger_token, message_title=message_title, message_body=message_body)
 
-                        route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
-                        return json.loads(dumps(route_to_request)), 200
-                    else:
-                        return {'error': 'Internal server error, no route found.'}, 500, {'Content-type': 'application/json'}
+                    route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
+                    return json.loads(dumps(route_to_request)), 200
                 else:
-                    return {'error': 'Conductor inexistente.'}, 500, {'Content-type': 'application/json'}
+                    return {'error': 'Internal server error, no route found.'}, 500, {'Content-type': 'application/json'}
             else:
-                return {'error': 'Bad parameters, driver_id needed'}, 400, {'Content-type': 'application/json'}
+                return {'error': 'Conductor inexistente.'}, 500, {'Content-type': 'application/json'}
+        else:
+            return {'error': 'Bad parameters, driver_id needed'}, 400, {'Content-type': 'application/json'}
 	    
 
 if __name__ == "__main__":
