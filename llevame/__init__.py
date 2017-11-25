@@ -1,8 +1,7 @@
-from builtins import staticmethod
-
 import requests
 from bson.json_util import dumps
-from flask import Flask, request, json
+from functools import wraps
+from flask import Flask, request, json, Response
 from flask_restful import reqparse, abort
 from flask_restful.inputs import boolean
 from flask_restplus import Resource, Api, fields
@@ -10,6 +9,8 @@ from flask_pymongo import PyMongo
 from bson.objectid import ObjectId
 from pyfcm import FCMNotification
 import logging
+import datetime
+import jwt
 import json
 from werkzeug.contrib.cache import SimpleCache
 
@@ -18,8 +19,9 @@ logging.basicConfig(filename='application.log', level=logging.ERROR, format='%(a
                     datefmt='%m/%d/%Y %I:%M:%S %p')
 
 app = Flask(__name__)
-api = Api(app)
+app.config['SECRET_KEY'] = 'grupo7'
 
+api = Api(app)
 
 # Configuracion URI Mongo
 MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame"
@@ -109,25 +111,82 @@ driver_parser.add_argument('available', type=boolean, location='args')
 
 ### HELPER FUNCTIONS ##
 
+def encode_auth_token(user_id):
+    """
+    Generates the Auth Token
+    :return: string
+    """
+    try:
+        payload = {
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, seconds=3600),
+            'iat': datetime.datetime.utcnow(),
+            'sub': str(user_id)
+        }
+        return jwt.encode(
+            payload,
+            app.config.get('SECRET_KEY'),
+            algorithm='HS256'
+        )
+    except Exception as e:
+        return e
+
+def decode_auth_token(auth_token):
+    """
+    Decodes the auth token
+    :param auth_token:
+    :return: integer|string
+    """
+    try:
+        payload = jwt.decode(auth_token, app.config.get('SECRET_KEY'))
+        return payload['sub']
+    except jwt.ExpiredSignatureError:
+        return 'Signature expired. Please log in again.'
+    except jwt.InvalidTokenError:
+        return 'Invalid token. Please log in again.'
+
 def get_cache(str):
     var = cache.get(str)
     if not var:
         return "NOT_SET_YET"
     return var
 
-def validate_auth():
-	auth = request.authorization
-	if not auth:  # no header set
-		abort(401)
-	user = UserModel.query.filter_by(username=auth.username).first()
-	if user is None or user.password != auth.password:
-		abort(401)
+
+def check_auth(ss_id):
+    """This function is called to check if ss_id is valid.
+    """
+    ss_id = decode_auth_token(ss_id)
+    user = mongo.db.passengers.find_one({'ss_id': ss_id})
+    if not user:
+        user = mongo.db.drivers.find_one({'ss_id': ss_id})
+        if not user:
+            return False
+        
+    return True
+    
+
+def authenticate():
+    """Sends a 401 response that enables basic auth"""
+    return Response(
+        'Could not verify your access level for that URL.\n'
+        'You have to login with proper credentials', 401,
+    {'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.headers.get('authorization')
+        if not auth or not check_auth(auth):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
+
 ########################
 
 
 @api.route('/api/v1/drivers')
 class DriversController(Resource):
     @api.response(200, 'Success')
+    ##@requires_auth
     def get(self):
         try:
             args = driver_parser.parse_args()
@@ -199,8 +258,8 @@ class DriversController(Resource):
             else:
                 logging.error('Driver already registered id: %s', driver['ss_id'])
                 return {'error': 'Driver already registered'}, 400, {'Content-type': 'application/json'}
-        except:
-            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
+        except Exception as e:
+            return {'error': 'Error inesperado ' + e.message}, 500, {'Content-type': 'application/json'}
 
 @api.route('/api/v1/drivers/<string:driver_id>')
 class DriverController(Resource):
@@ -398,6 +457,7 @@ class UserLoginController(Resource):
             if ss_response.status_code == 200 :
                 user = json.loads(ss_response.content)
                 response = {}
+                auth_header = {}
                 if user.get("user"):
                     id = user.get("user").get("id")
                     if id:
@@ -406,10 +466,11 @@ class UserLoginController(Resource):
                         elif user.get("user").get("type") == "driver":
                             response = mongo.db.drivers.find_one({'ss_id': int(id)})
                         response["type"] = user.get("user").get("type")
-                return json.loads(dumps(response)), ss_response.status_code
+                        auth_header = {'authorization' : encode_auth_token(id)}
+                return json.loads(dumps(response)), ss_response.status_code, auth_header
             return json.loads(ss_response.content), ss_response.status_code
-        except:
-            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
+        except Exception as e:
+            return {'error': 'Error inesperado ' + e.message}, 500, {'Content-type': 'application/json'}
 
 @api.route("/api/v1/routes")
 class RoutesController(Resource):
@@ -488,28 +549,7 @@ class RoutesController(Resource):
                     return {'error': 'Conductor inexistente.'}, 500, {'Content-type': 'application/json'}
             else:
                 return {'error': 'Bad parameters, driver_id needed'}, 400, {'Content-type': 'application/json'}
-
-
-
-class User:
-    def __init__(self):
-        pass
-
-    def generate_auth_token(self, expiration=600):
-        s = Serializer(app.config['SECRET_KEY'], expires_in=expiration)
-        return s.dumps({'id': 'llevame'})
-
-    @staticmethod
-    def verify_auth_token(token):
-        s = Serializer(app.config['SECRET_KEY'])
-        try:
-            data = s.loads(token)
-        except SignatureExpired:
-            return None  # valid token, but expired
-        except BadSignature:
-            return None  # invalid token
-        user = User.query.get(data['id'])
-        return user
+	    
 
 if __name__ == "__main__":
     app.run(debug=True)
