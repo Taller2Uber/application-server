@@ -140,6 +140,7 @@ class DriversController(Resource):
             firebase_token = request.json.get('firebase_token')
             fb_id = ''
             driver = None
+            first_name = request.json.get('first_name')
             if fb_token:
                 fb_response = requests.get(
                     'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name').content
@@ -147,6 +148,7 @@ class DriversController(Resource):
                 if 'error' not in fb_body:
                     fb_id = fb_body.get("id")
                     driver = drivers.find_one({'fb_id': fb_id})
+                    first_name = fb_body.get('name')
                 else:
                     return fb_body, 400
             else:
@@ -158,7 +160,7 @@ class DriversController(Resource):
                     'password': password or 'default',
                     'fb': {'authToken': fb_token,
                            'userid': fb_id},
-                    'firstname': request.json.get('first_name') or 'default',
+                    'firstname': first_name or 'default',
                     'lastname': request.json.get('last_name') or 'default',
                     'country': request.json.get('country') or 'default',
                     'email': request.json.get('email') or 'default',
@@ -172,8 +174,8 @@ class DriversController(Resource):
                         '_ref': created_driver.get('_ref'),
                         'fb_id': fb_id,
                         'firebase_token': firebase_token,
-                        'firstname': created_driver.get('firstname'),
-                        'lastname': created_driver.get('lastname'),
+                        'first_name': created_driver.get('firstname'),
+                        'last_name': created_driver.get('lastname'),
                         'email': created_driver.get('email'),
                         'country': created_driver.get('country'),
                         'gender': created_driver.get('gender'),
@@ -289,6 +291,7 @@ class PassengersController(Resource):
             password = request.json.get('password')
             firebase_token = request.json.get('firebase_token')
             fb_id = ''
+            first_name = request.json.get('first_name')
             passenger = None
             if fb_token:
                 fb_response = requests.get(
@@ -296,11 +299,10 @@ class PassengersController(Resource):
                 fb_body = json.loads(fb_response)
                 if 'error' not in fb_body:
                     fb_id = fb_body.get("id")
+                    first_name = fb_body.get('name')
                     passenger = passengers.find_one({'fb_id': fb_id})
                 else:
                     return fb_body, 400
-            if fb_token:
-                passenger = passengers.find_one({'fb_id': fb_id})
             else:
                 passenger = passengers.find_one({'user_name': user_name, 'password': password})
             if not passenger:
@@ -310,7 +312,7 @@ class PassengersController(Resource):
                     'password': password or 'default',
                     'fb': {'authToken': fb_token,
                            'userid': fb_id},
-                    'firstname': request.json.get('first_name') or 'default',
+                    'firstname': first_name or 'default',
                     'lastname': request.json.get('last_name') or 'default',
                     'country': request.json.get('country') or 'default',
                     'email': request.json.get('email') or 'default',
@@ -324,8 +326,8 @@ class PassengersController(Resource):
                         '_ref': created_passenger.get('_ref'),
                         'fb_id': fb_id,
                         'firebase_token': firebase_token,
-                        'firstname': created_passenger.get('firstname'),
-                        'lastname': created_passenger.get('lastname'),
+                        'first_name': created_passenger.get('firstname'),
+                        'last_name': created_passenger.get('lastname'),
                         'email': created_passenger.get('email'),
                         'country': created_passenger.get('country'),
                         'gender': created_passenger.get('gender'),
