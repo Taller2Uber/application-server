@@ -1,13 +1,16 @@
 import requests
 from bson.json_util import dumps
-from flask import Flask, request, json
-from flask_restful import reqparse
+from functools import wraps
+from flask import Flask, request, json, Response
+from flask_restful import reqparse, abort
 from flask_restful.inputs import boolean
 from flask_restplus import Resource, Api, fields
 from flask_pymongo import PyMongo
 from bson.objectid import ObjectId
 from pyfcm import FCMNotification
 import logging
+import datetime
+import jwt
 import json
 from werkzeug.contrib.cache import SimpleCache
 
@@ -16,8 +19,9 @@ logging.basicConfig(filename='application.log', level=logging.ERROR, format='%(a
                     datefmt='%m/%d/%Y %I:%M:%S %p')
 
 app = Flask(__name__)
-api = Api(app)
+app.config['SECRET_KEY'] = 'grupo7'
 
+api = Api(app)
 
 # Configuracion URI Mongo
 MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame"
@@ -107,11 +111,74 @@ driver_parser.add_argument('available', type=boolean, location='args')
 
 ### HELPER FUNCTIONS ##
 
+def encode_auth_token(user_id):
+    """
+    Generates the Auth Token
+    :return: string
+    """
+    try:
+        payload = {
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, seconds=3600),
+            'iat': datetime.datetime.utcnow(),
+            'sub': str(user_id)
+        }
+        return jwt.encode(
+            payload,
+            app.config.get('SECRET_KEY'),
+            algorithm='HS256'
+        )
+    except Exception as e:
+        return e
+
+def decode_auth_token(auth_token):
+    """
+    Decodes the auth token
+    :param auth_token:
+    :return: integer|string
+    """
+    try:
+        payload = jwt.decode(auth_token, app.config.get('SECRET_KEY'))
+        return payload['sub']
+    except jwt.ExpiredSignatureError:
+        return 'Signature expired. Please log in again.'
+    except jwt.InvalidTokenError:
+        return 'Invalid token. Please log in again.'
+
 def get_cache(str):
     var = cache.get(str)
     if not var:
         return "NOT_SET_YET"
     return var
+
+
+def check_auth(ss_id):
+    """This function is called to check if ss_id is valid.
+    """
+    try: 
+        ss_id = decode_auth_token(ss_id)
+        user = mongo.db.passengers.find_one({'ss_id': int(ss_id)})
+        if not user:
+            user = mongo.db.drivers.find_one({'ss_id': int(ss_id)})
+            if not user:
+                return False
+
+        return True
+    except:
+        return False
+    
+
+def authenticate():
+    """Sends a 401 response that enables basic auth"""
+    return {'error': 'Log in and send token on header'}, 401, {'Content-type': 'application/json'}
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.headers.get('authorization')
+        if not auth or not check_auth(auth):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
 
 ########################
 
@@ -119,6 +186,7 @@ def get_cache(str):
 @api.route('/api/v1/drivers')
 class DriversController(Resource):
     @api.response(200, 'Success')
+    @requires_auth
     def get(self):
         try:
             args = driver_parser.parse_args()
@@ -192,11 +260,12 @@ class DriversController(Resource):
             else:
                 logging.error('Driver already registered id: %s', driver['ss_id'])
                 return {'error': 'Driver already registered'}, 400, {'Content-type': 'application/json'}
-        except:
-            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
+        except Exception as e:
+            return {'error': 'Error inesperado ' + e.message}, 500, {'Content-type': 'application/json'}
 
 @api.route('/api/v1/drivers/<string:driver_id>')
 class DriverController(Resource):
+    @requires_auth
     def get(self, driver_id):
         try:
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
@@ -207,6 +276,7 @@ class DriverController(Resource):
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
     @api.expect(driver_update)
+    @requires_auth
     def put(self, driver_id):
         try:
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
@@ -219,6 +289,7 @@ class DriverController(Resource):
 
 @api.route('/api/v1/drivers/<string:driver_id>/cars')
 class CarsController(Resource):
+    @requires_auth
     def get(self, driver_id):
         try:
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
@@ -229,6 +300,7 @@ class CarsController(Resource):
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
     @api.expect(car)
+    @requires_auth
     def post(self, driver_id):
         try:
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
@@ -275,6 +347,7 @@ class CarsController(Resource):
 @api.route('/api/v1/passengers')
 class PassengersController(Resource):
     @api.response(200, 'Success')
+    @requires_auth
     def get(self):
         try:
             db_passengers = dumps(mongo.db.passengers.find())
@@ -351,6 +424,7 @@ class PassengersController(Resource):
 
 @api.route('/api/v1/passengers/<string:passenger_id>')
 class PassengerController(Resource):
+    @requires_auth
     def get(self, passenger_id):
         try:
             db_passenger = mongo.db.passengers.find_one({'ss_id': int(passenger_id)})
@@ -361,6 +435,7 @@ class PassengerController(Resource):
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
     @api.expect(passenger_update)
+    @requires_auth
     def put(self, passenger_id):
         try:
             db_passenger = mongo.db.passengers.find_one({'ss_id': int(passenger_id)})
@@ -391,6 +466,7 @@ class UserLoginController(Resource):
             if ss_response.status_code == 200 :
                 user = json.loads(ss_response.content)
                 response = {}
+                auth_header = {}
                 if user.get("user"):
                     id = user.get("user").get("id")
                     if id:
@@ -399,13 +475,15 @@ class UserLoginController(Resource):
                         elif user.get("user").get("type") == "driver":
                             response = mongo.db.drivers.find_one({'ss_id': int(id)})
                         response["type"] = user.get("user").get("type")
-                return json.loads(dumps(response)), ss_response.status_code
+                        auth_header = {'authorization' : encode_auth_token(id)}
+                return json.loads(dumps(response)), ss_response.status_code, auth_header
             return json.loads(ss_response.content), ss_response.status_code
-        except:
-            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
+        except Exception as e:
+            return {'error': 'Error inesperado ' + e.message}, 500, {'Content-type': 'application/json'}
 
 @api.route("/api/v1/routes")
 class RoutesController(Resource):
+    @requires_auth
     def post(self):
         try:
             start_coord = request.json.get('latitude_origin') + ',' + request.json.get('longitude_origin')
@@ -422,6 +500,7 @@ class RoutesController(Resource):
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
     @api.response(200, 'Success')
+    @requires_auth
     def get(self):
         try:
             db_routes = dumps(mongo.db.routes.find())
@@ -432,6 +511,7 @@ class RoutesController(Resource):
 @api.route("/api/v1/availableroutes")
 class RoutesController(Resource):
     @api.response(200, 'Success')
+    @requires_auth
     def get(self):
         try:
             db_routes = dumps(mongo.db.routes.find({'status': "PENDING"}))
@@ -441,6 +521,7 @@ class RoutesController(Resource):
 
 @api.route("/api/v1/routes/confirm")
 class RoutesController(Resource):
+    @requires_auth
     def post(self):
         try:
             route = request.json.get('route')
@@ -457,6 +538,7 @@ class RoutesController(Resource):
 @api.route("/api/v1/requestroute/<string:route_id>")
 class RoutesController(Resource):
     @api.expect(coordinates)
+    @requires_auth
     def post(self, route_id):
         
             driver_id = request.json.get('driver_id')
@@ -481,8 +563,7 @@ class RoutesController(Resource):
                     return {'error': 'Conductor inexistente.'}, 500, {'Content-type': 'application/json'}
             else:
                 return {'error': 'Bad parameters, driver_id needed'}, 400, {'Content-type': 'application/json'}
-
-
+	    
 
 if __name__ == "__main__":
     app.run(debug=True)
