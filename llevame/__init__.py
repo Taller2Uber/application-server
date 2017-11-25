@@ -154,14 +154,17 @@ def get_cache(str):
 def check_auth(ss_id):
     """This function is called to check if ss_id is valid.
     """
-    ss_id = decode_auth_token(ss_id)
-    user = mongo.db.passengers.find_one({'ss_id': int(ss_id)})
-    if not user:
-        user = mongo.db.drivers.find_one({'ss_id': int(ss_id)})
+    try: 
+        ss_id = decode_auth_token(ss_id)
+        user = mongo.db.passengers.find_one({'ss_id': int(ss_id)})
         if not user:
-            return False
-        
-    return True
+            user = mongo.db.drivers.find_one({'ss_id': int(ss_id)})
+            if not user:
+                return False
+
+        return True
+    except:
+        return False
     
 
 def authenticate():
