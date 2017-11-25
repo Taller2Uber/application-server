@@ -155,9 +155,9 @@ def check_auth(ss_id):
     """This function is called to check if ss_id is valid.
     """
     ss_id = decode_auth_token(ss_id)
-    user = mongo.db.passengers.find_one({'ss_id': ss_id})
+    user = mongo.db.passengers.find_one({'ss_id': int(ss_id)})
     if not user:
-        user = mongo.db.drivers.find_one({'ss_id': ss_id})
+        user = mongo.db.drivers.find_one({'ss_id': int(ss_id)})
         if not user:
             return False
         
@@ -166,10 +166,7 @@ def check_auth(ss_id):
 
 def authenticate():
     """Sends a 401 response that enables basic auth"""
-    return Response(
-        'Could not verify your access level for that URL.\n'
-        'You have to login with proper credentials', 401,
-    {'WWW-Authenticate': 'Basic realm="Login Required"'})
+    return {'error': 'Log in and send token on header'}, 401, {'Content-type': 'application/json'}
 
 def requires_auth(f):
     @wraps(f)
@@ -186,7 +183,7 @@ def requires_auth(f):
 @api.route('/api/v1/drivers')
 class DriversController(Resource):
     @api.response(200, 'Success')
-    ##@requires_auth
+    @requires_auth
     def get(self):
         try:
             args = driver_parser.parse_args()
@@ -265,6 +262,7 @@ class DriversController(Resource):
 
 @api.route('/api/v1/drivers/<string:driver_id>')
 class DriverController(Resource):
+    @requires_auth
     def get(self, driver_id):
         try:
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
@@ -275,6 +273,7 @@ class DriverController(Resource):
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
     @api.expect(driver_update)
+    @requires_auth
     def put(self, driver_id):
         try:
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
@@ -287,6 +286,7 @@ class DriverController(Resource):
 
 @api.route('/api/v1/drivers/<string:driver_id>/cars')
 class CarsController(Resource):
+    @requires_auth
     def get(self, driver_id):
         try:
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
@@ -297,6 +297,7 @@ class CarsController(Resource):
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
     @api.expect(car)
+    @requires_auth
     def post(self, driver_id):
         try:
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
@@ -343,6 +344,7 @@ class CarsController(Resource):
 @api.route('/api/v1/passengers')
 class PassengersController(Resource):
     @api.response(200, 'Success')
+    @requires_auth
     def get(self):
         try:
             db_passengers = dumps(mongo.db.passengers.find())
@@ -419,6 +421,7 @@ class PassengersController(Resource):
 
 @api.route('/api/v1/passengers/<string:passenger_id>')
 class PassengerController(Resource):
+    @requires_auth
     def get(self, passenger_id):
         try:
             db_passenger = mongo.db.passengers.find_one({'ss_id': int(passenger_id)})
@@ -429,6 +432,7 @@ class PassengerController(Resource):
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
     @api.expect(passenger_update)
+    @requires_auth
     def put(self, passenger_id):
         try:
             db_passenger = mongo.db.passengers.find_one({'ss_id': int(passenger_id)})
@@ -476,6 +480,7 @@ class UserLoginController(Resource):
 
 @api.route("/api/v1/routes")
 class RoutesController(Resource):
+    @requires_auth
     def post(self):
         try:
             start_coord = request.json.get('latitude_origin') + ',' + request.json.get('longitude_origin')
@@ -492,6 +497,7 @@ class RoutesController(Resource):
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
     @api.response(200, 'Success')
+    @requires_auth
     def get(self):
         try:
             db_routes = dumps(mongo.db.routes.find())
@@ -502,6 +508,7 @@ class RoutesController(Resource):
 @api.route("/api/v1/availableroutes")
 class RoutesController(Resource):
     @api.response(200, 'Success')
+    @requires_auth
     def get(self):
         try:
             db_routes = dumps(mongo.db.routes.find({'status': "PENDING"}))
@@ -511,6 +518,7 @@ class RoutesController(Resource):
 
 @api.route("/api/v1/routes/confirm")
 class RoutesController(Resource):
+    @requires_auth
     def post(self):
         try:
             route = request.json.get('route')
@@ -527,6 +535,7 @@ class RoutesController(Resource):
 @api.route("/api/v1/requestroute/<string:route_id>")
 class RoutesController(Resource):
     @api.expect(coordinates)
+    @requires_auth
     def post(self, route_id):
         
             driver_id = request.json.get('driver_id')
