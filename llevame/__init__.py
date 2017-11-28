@@ -37,8 +37,9 @@ with open('config.json') as data_file:
 app_token = conf["as_token"]
 ss_url = conf["ss_url"]
 google_token =  conf["google_token"]
+firebase_key =  conf["firebase_key"]
 
-push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
+push_service = FCMNotification(api_key=firebase_key)
 
 
 coordinates = api.model('Google coordinates', {
@@ -109,6 +110,31 @@ driver_parser = reqparse.RequestParser()
 # Look only in the querystring
 driver_parser.add_argument('available', type=boolean, location='args')
 
+### THREADS FUNCTIONS ##
+
+def ping():
+    ping_response = requests.post(ss_url + '/api/servers/ping', headers={'token': app_token})
+    if ping_response.status_code == 200:
+        app_token = json.loads(ping_response.content).get('token').get('token')
+        print("ping token: ", app_token)
+    time.sleep(18000)
+
+def calculateDistance(lat1,lon1,lat2,lon2):
+    R = 6373.0
+    lat1 = radians(lat1)
+    lon1 = radians(lon1)
+    lat2 = radians(lat2)
+    lon2 = radians(lon2)
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c
+
+hilo1 = threading.Thread(target=ping)
+hilo1.start()
+
+    
 ### HELPER FUNCTIONS ##
 
 def encode_auth_token(user_id):
