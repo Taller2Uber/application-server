@@ -182,6 +182,10 @@ def requires_auth(f):
 
 ########################
 
+@api.route('/')
+class index(Resource):
+    def get(self):
+        return "Hello world"
 
 @api.route('/api/v1/drivers')
 class DriversController(Resource):

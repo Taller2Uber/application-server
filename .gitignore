@@ -6,7 +6,7 @@
 .idea/
 env
 env*
-**/lib
+**/lib/
 __pycache__/
 *.py[cod]
 .Python
