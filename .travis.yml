@@ -6,7 +6,7 @@ install:
   - pip install -r requirements.txt
 
 script: 
-  - export PYTHONPATH=llevame
+  - export PYTHONPATH=/home/travis/virtualenv/llevame
   - pytest llevame/ --cov=llevame
 
 after_success:
