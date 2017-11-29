@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/gh/Taller2Uber/application-server/branch/master/graph/badge.svg)](https://codecov.io/gh/Taller2Uber/application-server)
+
 Application-Server
 ======================
 

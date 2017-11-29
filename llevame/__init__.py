@@ -1,3 +1,4 @@
+import os
 import requests
 from bson.json_util import dumps
 from functools import wraps
@@ -7,7 +8,9 @@ from flask_restful.inputs import boolean
 from flask_restplus import Resource, Api, fields
 from flask_pymongo import PyMongo
 from bson.objectid import ObjectId
-from pyfcm import FCMNotification
+from sharedServer.ss_api import SharedServer
+import sharedServer.ss_api
+#from pyfcm import FCMNotification
 import logging
 import datetime
 import jwt
@@ -23,7 +26,7 @@ app.config['SECRET_KEY'] = 'grupo7'
 api = Api(app)
 
 # Configuracion URI Mongo
-MONGO_URL = "mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame"
+MONGO_URL = os.getenv('MONGO_URL')
 
 logging.error('using mongo cofiguration on init: %s', MONGO_URL)
 
@@ -33,11 +36,11 @@ mongo = PyMongo(app)
 # Configuraciones Shared Server
 with open('config.json') as data_file:
     conf = json.load(data_file)
-app_token = conf["as_token"]
-ss_url = conf["ss_url"]
-google_token =  conf["google_token"]
+app_token = sharedServer.ss_api.app_token
+ss_url = sharedServer.ss_api.ss_url
+google_token = conf["google_token"]
 
-push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
+#push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
 
 
 coordinates = api.model('Google coordinates', {
@@ -181,6 +184,10 @@ def requires_auth(f):
 
 ########################
 
+@api.route('/')
+class index(Resource):
+    def get(self):
+        return "Hello world"
 
 @api.route('/api/v1/drivers')
 class DriversController(Resource):
@@ -220,7 +227,7 @@ class DriversController(Resource):
             else:
                 driver = drivers.find_one({'user_name': user_name, 'password': password})
             if not driver:
-                ss_create_driver = requests.post(ss_url + '/api/users', json={
+                jsonBody={
                     'type': 'driver',
                     'username': user_name or 'default',
                     'password': password or 'default',
@@ -231,7 +238,8 @@ class DriversController(Resource):
                     'country': request.json.get('country') or 'default',
                     'email': request.json.get('email') or 'default',
                     'birthdate': request.json.get('birthday') or '09-09-1970'
-                }, headers={'token': app_token})
+                }
+                ss_create_driver = SharedServer().createUser(jsonBody)
                 if 201 == ss_create_driver.status_code:
                     json_response = json.loads(ss_create_driver.content)
                     created_driver = json_response.get('user')
