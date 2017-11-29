@@ -185,7 +185,6 @@ def requires_auth(f):
 @api.route('/api/v1/drivers')
 class DriversController(Resource):
     @api.response(200, 'Success')
-    @requires_auth
     def get(self):
         try:
             args = driver_parser.parse_args()
@@ -485,7 +484,6 @@ class UserLoginController(Resource):
 class RoutesController(Resource):
     @requires_auth
     def post(self):
-        try:
             passenger_id = request.json.get('passenger_id')
             start_coord = request.json.get('latitude_origin') + ',' + request.json.get('longitude_origin')
             end_coord = request.json.get('latitude_destination') + ',' + request.json.get('longitude_destination')
@@ -519,14 +517,25 @@ class RoutesController(Resource):
                     if ss_estimated_price.status_code == 200:
                         response["estimated_price"] = json.loads(ss_estimated_price.content).get('cost').get('value')
                         return response, 200
+                    elif ss_estimated_price.status_code == 402:
+                        user_payment = requests.get(ss_url + "/api/users/" + str(passenger_id), headers={'token': app_token})
+                        if user_payment.status_code == 200:
+                            jlist = json.loads(user_payment.content).get("user").get("balance")
+                            balance = None
+                            for x in range(0, len(jlist)):
+                                if (jlist[x].get("currency")) == "ARS":
+                                    balance = jlist[x].get("value")
+
+                            return {'error':'Negative balance.', 'balance': balance}, 402, {'Content-type': 'application/json'}
+                        else:
+                            return json.loads(user_payment.content), user_payment.status_code
                     else:
                         return json.loads(ss_estimated_price.content), ss_estimated_price.status_code
                 else:
                     return response, google_routes.status_code
             else:
                 return {'error': 'Bad parameters, passenger, start and end needed'}, 400, {'Content-type': 'application/json'}
-        except:
-            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
+
 
     @api.response(200, 'Success')
     @requires_auth
@@ -657,12 +666,21 @@ class FinishRoutesController(Resource):
 
             message_title = "Llevame"
             message_body = "Tu viaje ha finalizado."
-            result = push_service.notify_single_device(registration_id=passenger_token, message_title=message_title, message_body=message_body, data_message=json.loads(dumps(route_to_request)))
+            result = push_service.notify_single_device(registration_id=passenger_token, message_body=message_body, data_message=json.loads(dumps(route_to_request)))
 
             return json.loads(dumps(route_to_request)), 200
         else:
             return {'error': 'Bad Request, no route found.'}, 400, {'Content-type': 'application/json'}
 
+@api.route("/api/v1/notif")
+class Notifs(Resource):
+    def get(self):
+        #notificacion firebase a passenger
+
+
+        result = push_service.notify_single_device(registration_id="dFUsCR3KbKw:APA91bGCf9XOniAWV-MblDvnTvi_vYuLMBCquNnSCmfVWsTN3yM-lSeE_sxtBFfc92Bk2GI3PNA46eeAiFqAilh4h39BvK-fP20u7dekMSPHCHe-NmXhxVg8nuZVGA8lUjw5z9PcGFfF", message_title = "Llevame", message_body={"type":"no-chat","content": {"driver":"juan"}})
+
+        return "notif", 200
 
 
 if __name__ == "__main__":
