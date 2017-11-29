@@ -41,6 +41,8 @@ Para levantar el servidor es necesario correr los siguientes comandos:
 Con todo instalado, procedemos a levantar el servidor:
 
     source llevame/bin/activate
+    
+    export MONGO_URL=mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame
 
     gunicorn llevame:app
     
