@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/Taller2Uber/application-server.svg?branch=master)](https://travis-ci.org/Taller2Uber/application-server)
+
 [![codecov](https://codecov.io/gh/Taller2Uber/application-server/branch/master/graph/badge.svg)](https://codecov.io/gh/Taller2Uber/application-server)
 
 Application-Server
