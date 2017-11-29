@@ -12,7 +12,9 @@ setup(
     version='1.0.0',
     description='TP Taller2 2017 2do Cuat.',
     url='https://github.com/Taller2Uber/application-server',
-
+    packages=[
+        'llevame'
+    ],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
