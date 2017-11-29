@@ -26,5 +26,8 @@ comment:
   require_changes: no
 
 ignore:
-  - "llevame/test"
-  - "test"
+  - "llevame/tests"
+  - "tests"
+  
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
