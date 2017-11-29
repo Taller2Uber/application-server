@@ -12,8 +12,9 @@ import logging
 import datetime
 import jwt
 import json
-from werkzeug.contrib.cache import SimpleCache
-
+import time
+import threading
+import time
 # Configuracion de logs
 logging.basicConfig(filename='application.log', level=logging.ERROR, format='%(asctime)s %(message)s',
                     datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -113,11 +114,12 @@ driver_parser.add_argument('available', type=boolean, location='args')
 ### THREADS FUNCTIONS ##
 
 def ping():
-    ping_response = requests.post(ss_url + '/api/servers/ping', headers={'token': app_token})
-    if ping_response.status_code == 200:
-        app_token = json.loads(ping_response.content).get('token').get('token')
-        print("ping token: ", app_token)
-    time.sleep(18000)
+    while True:
+        ping_response = requests.post(ss_url + '/api/servers/ping', headers={'token': app_token})
+        if ping_response.status_code == 200:
+            json.loads(ping_response.content).get('token').get('token')
+            print("ping token: ", json.loads(ping_response.content).get('token').get('token'))
+        time.sleep(3600)
 
 def calculateDistance(lat1,lon1,lat2,lon2):
     R = 6373.0
