@@ -8,8 +8,8 @@ from flask_restful.inputs import boolean
 from flask_restplus import Resource, Api, fields
 from flask_pymongo import PyMongo
 from bson.objectid import ObjectId
-from llevame.sharedServer.ss_api import SharedServer
-import llevame.sharedServer.ss_api
+from sharedServer.ss_api import SharedServer
+import sharedServer.ss_api
 #from pyfcm import FCMNotification
 import logging
 import datetime
@@ -36,8 +36,8 @@ mongo = PyMongo(app)
 # Configuraciones Shared Server
 with open('config.json') as data_file:
     conf = json.load(data_file)
-app_token = llevame.sharedServer.ss_api.app_token
-ss_url = llevame.sharedServer.ss_api.ss_url
+app_token = sharedServer.ss_api.app_token
+ss_url = sharedServer.ss_api.ss_url
 google_token = conf["google_token"]
 
 #push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")

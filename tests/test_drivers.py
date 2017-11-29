@@ -5,8 +5,8 @@ import llevame
 from unittest.mock import MagicMock
 from unittest import mock
 from unittest.mock import Mock
-from llevame.sharedServer.ss_api import SharedServer
-import llevame.sharedServer.ss_api
+from sharedServer.ss_api import SharedServer
+import sharedServer.ss_api
 from requests.models import Response
 
 class DriverMock(object):
