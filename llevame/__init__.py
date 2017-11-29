@@ -672,6 +672,39 @@ class FinishRoutesController(Resource):
         else:
             return {'error': 'Bad Request, no route found.'}, 400, {'Content-type': 'application/json'}
 
+
+@api.route("/api/v1/users/<string:user_id>/pay")
+class UsersPayController(Resource):
+    def post(self, user_id):
+        passenger = mongo.db.passengers.find_one({"ss_id": int(user_id)})
+        driver = mongo.db.drivers.find_one({"ss_id": int(user_id)})
+        if passenger or driver:
+            amount_to_pay = request.json.get('amount')
+            users_trips = requests.get(ss_url + "/api/users/" + user_id + "/trips", headers={'token': app_token})
+            if users_trips.status_code == 200:
+                trips_list = json.loads(users_trips.content).get("trips")
+                trip_id = trips_list[len(trips_list)-1].get("id")
+                user_payment = requests.post(ss_url + "/api/users/" + user_id + "/transactions", headers={'token': app_token}, json=
+                {
+                    "trip": trip_id,
+                    "timestamp": 0,
+                    "cost": {
+                        "value": amount_to_pay,
+                        "currency": "ARS"
+                    },
+                    "description": "pago",
+                    "data": {},
+                    "userid": user_id
+                })
+                if user_payment.status_code == 201:
+                    return {'message': 'Su pago se ha registrado con exito!'}, 200, {'Content-type': 'application/json'}
+                else:
+                    return {'error': 'Su pago no se pudo registrar con exito.'}, 500, {'Content-type': 'application/json'}
+            else:
+                return {'error': 'Bad Request, amount parameter needed'}, 400, {'Content-type': 'application/json'}
+        else:
+            return {'error': 'Bad Request, user_id invalid.'}, 400, {'Content-type': 'application/json'}
+
 @api.route("/api/v1/notif")
 class Notifs(Resource):
     def get(self):
