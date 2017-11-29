@@ -15,7 +15,6 @@ import logging
 import datetime
 import jwt
 import json
-from werkzeug.contrib.cache import SimpleCache
 
 # Configuracion de logs
 logging.basicConfig(filename='application.log', level=logging.ERROR, format='%(asctime)s %(message)s',
@@ -193,7 +192,6 @@ class index(Resource):
 @api.route('/api/v1/drivers')
 class DriversController(Resource):
     @api.response(200, 'Success')
-    @requires_auth
     def get(self):
         try:
             args = driver_parser.parse_args()
@@ -494,7 +492,6 @@ class UserLoginController(Resource):
 class RoutesController(Resource):
     @requires_auth
     def post(self):
-        try:
             passenger_id = request.json.get('passenger_id')
             start_coord = request.json.get('latitude_origin') + ',' + request.json.get('longitude_origin')
             end_coord = request.json.get('latitude_destination') + ',' + request.json.get('longitude_destination')
@@ -528,14 +525,25 @@ class RoutesController(Resource):
                     if ss_estimated_price.status_code == 200:
                         response["estimated_price"] = json.loads(ss_estimated_price.content).get('cost').get('value')
                         return response, 200
+                    elif ss_estimated_price.status_code == 402:
+                        user_payment = requests.get(ss_url + "/api/users/" + str(passenger_id), headers={'token': app_token})
+                        if user_payment.status_code == 200:
+                            jlist = json.loads(user_payment.content).get("user").get("balance")
+                            balance = None
+                            for x in range(0, len(jlist)):
+                                if (jlist[x].get("currency")) == "ARS":
+                                    balance = jlist[x].get("value")
+
+                            return {'error':'Negative balance.', 'balance': balance}, 402, {'Content-type': 'application/json'}
+                        else:
+                            return json.loads(user_payment.content), user_payment.status_code
                     else:
                         return json.loads(ss_estimated_price.content), ss_estimated_price.status_code
                 else:
                     return response, google_routes.status_code
             else:
                 return {'error': 'Bad parameters, passenger, start and end needed'}, 400, {'Content-type': 'application/json'}
-        except:
-            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
+
 
     @api.response(200, 'Success')
     @requires_auth
@@ -546,8 +554,26 @@ class RoutesController(Resource):
         except:
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
-@api.route("/api/v1/availableroutes")
-class RoutesController(Resource):
+
+@api.route("/api/v1/routes/confirm")
+class ConfirmRoutesController(Resource):
+    @requires_auth
+    def post(self):
+        try:
+            route = request.json.get('route')
+            passenger_id = request.json.get('passenger_id')
+            if route and passenger_id:
+                route_to_insert = {"route": route, "passenger_id": passenger_id, "driver_id": None, "status": "PENDING", "initTimeStamp": "", "finishTimeStamp": ""}
+                mongo.db.routes.insert(route_to_insert)
+                return json.loads(dumps(route_to_insert)), 200
+            else:
+                return {'error': 'Bad parameters, passenger_id and route needed'}, 400, {'Content-type': 'application/json'}
+        except:
+            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
+
+
+@api.route("/api/v1/routes/availables")
+class AvailableRoutesController(Resource):
     @api.response(200, 'Success')
     @requires_auth
     def get(self):
@@ -557,24 +583,8 @@ class RoutesController(Resource):
         except:
             return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
-@api.route("/api/v1/routes/confirm")
-class RoutesController(Resource):
-    @requires_auth
-    def post(self):
-        try:
-            route = request.json.get('route')
-            passenger_id = request.json.get('passenger_id')
-            if route and passenger_id:
-                route_to_insert = {"route": route, "passenger_id": passenger_id, "driver_id": None, "status": "PENDING"}
-                mongo.db.routes.insert(route_to_insert)
-                return json.loads(dumps(route_to_insert)), 200
-            else:
-                return {'error': 'Bad parameters, passenger_id and route needed'}, 400, {'Content-type': 'application/json'}
-        except:
-            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
-
-@api.route("/api/v1/requestroute/<string:route_id>")
-class RoutesController(Resource):
+@api.route("/api/v1/routes/request/<string:route_id>")
+class RequestRoutesController(Resource):
     @api.expect(coordinates)
     @requires_auth
     def post(self, route_id):
@@ -584,15 +594,15 @@ class RoutesController(Resource):
             if driver:
                 route_to_request = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
                 if route_to_request:
-                    mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"driver_id": driver_id, "status": "ON MY WAY"}})
+                    mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"driver_id": driver_id, "status": "WAITING_ACCEPTANCE"}})
                     #notificacion firebase a passenger
                     passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
+                    route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
 
                     message_title = "Llevame"
-                    message_body = "Tu viaje ha sido confirmado"
-                    result = push_service.notify_single_device(registration_id=passenger_token, message_title=message_title, message_body=message_body)
+                    message_body = "Tu viaje ha sido elegido por un conductor."
+                    result = push_service.notify_single_device(registration_id=passenger_token, message_title=message_title, message_body=message_body, data_message=json.loads(dumps(route_to_request)))
 
-                    route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
                     return json.loads(dumps(route_to_request)), 200
                 else:
                     return {'error': 'Internal server error, no route found.'}, 500, {'Content-type': 'application/json'}
@@ -600,7 +610,86 @@ class RoutesController(Resource):
                 return {'error': 'Conductor inexistente.'}, 500, {'Content-type': 'application/json'}
         else:
             return {'error': 'Bad parameters, driver_id needed'}, 400, {'Content-type': 'application/json'}
-	    
+
+@api.route("/api/v1/routes/answerRequest/<string:route_id>")
+class AnswerRoutesRequestController(Resource):
+    @requires_auth
+    def post(self, route_id):
+        accepted = request.json.get('accepted')
+        route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
+        if route_to_request:
+            if accepted != None:
+                driver = mongo.db.drivers.find_one({'ss_id': route_to_request.get('driver_id')})
+                if driver and passenger:
+                    if accepted:
+                        mongo.db.routes.update_one({"_id": ObjectId(route_id)}, {'$set': {"driver_id": route_to_request.get('driver_id'), "status": "ACCEPTED"}})
+                        #notificacion firebase a passenger
+                        message_title = "Llevame"
+                        message_body = "Tu viaje ha sido confirmado por el pasajero."
+                        result = push_service.notify_single_device(registration_id=driver.get('firebase_token'), data_message=json.loads(dumps(route_to_request)))
+                        return {'message': 'Ruta confirmada con exito, aguarde al chofer.'}, 200, {'Content-type': 'application/json'}
+                    else:
+                        mongo.db.routes.update_one({"_id": ObjectId(route_id)}, {'$set': {"driver_id": route_to_request.get('driver_id'), "status": "PENDING"}})
+                        message_title = "Llevame"
+                        message_body = "Tu viaje ha sido rechazado por el pasajero."
+                        result = push_service.notify_single_device(registration_id=driver.get('firebase_token'))
+                        return {'message': 'Ruta rechazada con exito, aguarde a que otro chofer elija esta ruta.'}, 200, {'Content-type': 'application/json'}
+                    return {'error': 'Not route found with those passenger and driver id.'}, 400, {'Content-type': 'application/json'}
+                else:
+                    return {'error': 'Internal server error, no route found.'}, 500, {'Content-type': 'application/json'}
+        else:
+            return {'error': 'Bad parameters, route not found.'}, 400, {'Content-type': 'application/json'}
+
+
+@api.route("/api/v1/routes/start/<string:route_id>")
+class StartRoutesController(Resource):
+    @requires_auth
+    def post(self, route_id):
+            route_to_start = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
+            if route_to_start:
+                mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"status": "IN_PROGRESS", "initTimeStamp": datetime.datetime.now()}})
+                #notificacion firebase a passenger
+                passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_start.get('passenger_id'))}).get("firebase_token")
+                route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
+
+                message_title = "Llevame"
+                message_body = "Tu viaje ha comenzado."
+                result = push_service.notify_single_device(registration_id=passenger_token, message_title=message_title, message_body=message_body)
+
+                return json.loads(dumps(route_to_request)), 200
+            else:
+                return {'error': 'Internal server error, no route found.'}, 500, {'Content-type': 'application/json'}
+
+
+@api.route("/api/v1/routes/finish/<string:route_id>")
+class FinishRoutesController(Resource):
+    @requires_auth
+    def post(self, route_id):
+        route_to_request = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
+        if route_to_request:
+            mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"status": "FINISHED", "finishTimeStamp": datetime.datetime.now()}})
+            #notificacion firebase a passenger
+            passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
+            route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
+
+            message_title = "Llevame"
+            message_body = "Tu viaje ha finalizado."
+            result = push_service.notify_single_device(registration_id=passenger_token, message_body=message_body, data_message=json.loads(dumps(route_to_request)))
+
+            return json.loads(dumps(route_to_request)), 200
+        else:
+            return {'error': 'Bad Request, no route found.'}, 400, {'Content-type': 'application/json'}
+
+@api.route("/api/v1/notif")
+class Notifs(Resource):
+    def get(self):
+        #notificacion firebase a passenger
+
+
+        result = push_service.notify_single_device(registration_id="dFUsCR3KbKw:APA91bGCf9XOniAWV-MblDvnTvi_vYuLMBCquNnSCmfVWsTN3yM-lSeE_sxtBFfc92Bk2GI3PNA46eeAiFqAilh4h39BvK-fP20u7dekMSPHCHe-NmXhxVg8nuZVGA8lUjw5z9PcGFfF", message_title = "Llevame", message_body={"type":"no-chat","content": {"driver":"juan"}})
+
+        return "notif", 200
+
 
 if __name__ == "__main__":
     app.run(debug=True)
