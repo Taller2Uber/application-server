@@ -480,6 +480,33 @@ class UserLoginController(Resource):
         except Exception as e:
             return {'error': 'Error inesperado ' + e.message}, 500, {'Content-type': 'application/json'}
 
+
+@api.route("/api/v1/users/<string:user_id>/debt")
+class DebtController(Resource):
+    def get(self, user_id):
+        passenger = mongo.db.passengers.find_one({"ss_id": int(user_id)})
+        driver = mongo.db.drivers.find_one({"ss_id": int(user_id)})
+        if passenger or driver:
+            ss_user = requests.get(ss_url + "/api/users/" + user_id, headers={'token': app_token})
+
+            if ss_user.status_code == 200:
+                jlist = json.loads(ss_user.content).get("user").get("balance")
+                balance = None
+                for x in range(0, len(jlist)):
+                    if (jlist[x].get("currency")) == "ARS":
+                        balance = jlist[x].get("value")
+
+                methods = requests.get(ss_url + "/api/paymethods", headers={'token': app_token})
+                if methods.status_code == 200:
+                    return {'paymethods': json.loads(methods.content).get("paymethods"), "balance": balance}, 200, {'Content-type': 'application/json'}
+                else:
+                    return json.loads(methods.content), 500, {'Content-type': 'application/json'}
+            else:
+                return json.loads(ss_user.content), 500, {'Content-type': 'application/json'}
+        else:
+            return {'error': 'Bad Request, user_id invalid.'}, 400, {'Content-type': 'application/json'}
+
+
 @api.route("/api/v1/routes")
 class RoutesController(Resource):
     @requires_auth
@@ -537,14 +564,14 @@ class RoutesController(Resource):
                 return {'error': 'Bad parameters, passenger, start and end needed'}, 400, {'Content-type': 'application/json'}
 
 
-    @api.response(200, 'Success')
-    @requires_auth
-    def get(self):
-        try:
-            db_routes = dumps(mongo.db.routes.find())
-            return json.loads(db_routes), 200, {'Content-type': 'application/json'}
-        except:
-            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
+@api.response(200, 'Success')
+@requires_auth
+def get(self):
+    try:
+        db_routes = dumps(mongo.db.routes.find())
+        return json.loads(db_routes), 200, {'Content-type': 'application/json'}
+    except:
+        return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
 
 @api.route("/api/v1/routes/confirm")
@@ -588,9 +615,8 @@ class RequestRoutesController(Resource):
                     passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
                     route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
 
-                    message_title = "Llevame"
-                    message_body = "Tu viaje ha sido elegido por un conductor."
-                    result = push_service.notify_single_device(registration_id=passenger_token, message_title=message_title, message_body=message_body, data_message=json.loads(dumps(route_to_request)))
+
+                    result = push_service.notify_single_device(registration_id=passenger_token, message_title="Llevame", message_body= {"type": "driverConfirmedRoute", "content": route_id})
 
                     return json.loads(dumps(route_to_request)), 200
                 else:
@@ -612,15 +638,11 @@ class AnswerRoutesRequestController(Resource):
                     if accepted:
                         mongo.db.routes.update_one({"_id": ObjectId(route_id)}, {'$set': {"driver_id": route_to_request.get('driver_id'), "status": "ACCEPTED"}})
                         #notificacion firebase a passenger
-                        message_title = "Llevame"
-                        message_body = "Tu viaje ha sido confirmado por el pasajero."
-                        result = push_service.notify_single_device(registration_id=driver.get('firebase_token'), data_message=json.loads(dumps(route_to_request)))
+                        result = push_service.notify_single_device(registration_id=driver.get('firebase_token'), message_title="Llevame", message_body= {"type": "passengerConfirmedDriver", "content": route_id})
                         return {'message': 'Ruta confirmada con exito, aguarde al chofer.'}, 200, {'Content-type': 'application/json'}
                     else:
-                        mongo.db.routes.update_one({"_id": ObjectId(route_id)}, {'$set': {"driver_id": route_to_request.get('driver_id'), "status": "PENDING"}})
-                        message_title = "Llevame"
-                        message_body = "Tu viaje ha sido rechazado por el pasajero."
-                        result = push_service.notify_single_device(registration_id=driver.get('firebase_token'))
+                        mongo.db.routes.update_one({"_id": ObjectId(route_id)}, {'$set': {"driver_id": None, "status": "PENDING"}})
+                        result = push_service.notify_single_device(registration_id=driver.get('firebase_token'), message_title="Llevame", message_body= {"type": "passengerRejectedDriver", "content": route_id})
                         return {'message': 'Ruta rechazada con exito, aguarde a que otro chofer elija esta ruta.'}, 200, {'Content-type': 'application/json'}
                     return {'error': 'Not route found with those passenger and driver id.'}, 400, {'Content-type': 'application/json'}
                 else:
@@ -638,14 +660,21 @@ class StartRoutesController(Resource):
                 #notificacion firebase a passenger
                 passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_start.get('passenger_id'))}).get("firebase_token")
                 route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
-
-                message_title = "Llevame"
-                message_body = "Tu viaje ha comenzado."
-                result = push_service.notify_single_device(registration_id=passenger_token, message_title=message_title, message_body=message_body)
+                result = push_service.notify_single_device(registration_id=passenger_token, message_title="Llevame", message_body= {"type": "driverStartedRoute", "content": route_id})
 
                 return json.loads(dumps(route_to_request)), 200
             else:
                 return {'error': 'Internal server error, no route found.'}, 500, {'Content-type': 'application/json'}
+
+
+@api.route("/api/v1/routes/<string:route_id>")
+class SpecificRoutesController(Resource):
+    def get(self, route_id):
+        route = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
+        if route:
+            return json.loads(dumps(route)), 200
+        else:
+            return {'error': 'Bad request, no route found.'}, 400, {'Content-type': 'application/json'}
 
 
 @api.route("/api/v1/routes/finish/<string:route_id>")
@@ -706,15 +735,10 @@ class FinishRoutesController(Resource):
                                             "paymethod": {}
                                         })
             if ss_trip.status_code == 201:
-
                 mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"status": "FINISHED", "finishTimeStamp": datetime.datetime.now()}})
                 #notificacion firebase a passenger
                 passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
-                route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
-
-                message_title = "Llevame"
-                message_body = "Tu viaje ha finalizado."
-                result = push_service.notify_single_device(registration_id=passenger_token, message_body=message_body, data_message=json.loads(dumps(route_to_request)))
+                result = push_service.notify_single_device(registration_id=passenger_token, message_title="Llevame", message_body= {"type": "driverFinishedRoute", "content": route_id})
                 return {'message': 'Viaje finalizado con exito.'}, 200
             else:
                 return {'error': 'No se pudo terminar el viaje.'}, 500, {'Content-type': 'application/json'}
