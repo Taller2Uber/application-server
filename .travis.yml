@@ -6,6 +6,7 @@ install:
   - pip install -r requirements.txt
 
 script: 
+  - export MONGO_URL=mongodb://root:qmsroot@ds147681.mlab.com:47681/llevame_test
   - export PYTHONPATH=/home/travis/build/Taller2Uber/application-server/
   - pytest llevame/ --cov=llevame
 
