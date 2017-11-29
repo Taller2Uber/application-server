@@ -29,12 +29,12 @@ class AuthTestCase(unittest.TestCase):
             # within this block, current_app points to app.
             llevame.mongo.db.drivers.delete_many({})
 
-    def test_get_drivers(self):
-        """"Test case for obtaining drivers """
-        res = self.app.get('/api/v1/drivers', headers={ 'authorization' : ''})
-        result = json.loads(res.data.decode())
-        self.assertEqual(result, {'error': 'Log in and send token on header'})   
-        self.assertEqual(res.status_code, 401)
+    #def test_get_drivers(self):
+        #""Test case for obtaining drivers """
+        #res = self.app.get('/api/v1/drivers', headers={ 'authorization' : ''})
+        #result = json.loads(res.data.decode())
+        #self.assertEqual(result, {'error': 'Log in and send token on header'})   
+        #self.assertEqual(res.status_code, 401)
 
     def test_create_driver(self):
         """Test case for creating a driver """
