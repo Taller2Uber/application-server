@@ -549,7 +549,6 @@ class RoutesController(Resource):
 
 @api.route("/api/v1/routes/confirm")
 class ConfirmRoutesController(Resource):
-    @requires_auth
     def post(self):
         try:
             route = request.json.get('route')
@@ -567,7 +566,6 @@ class ConfirmRoutesController(Resource):
 @api.route("/api/v1/routes/availables")
 class AvailableRoutesController(Resource):
     @api.response(200, 'Success')
-    @requires_auth
     def get(self):
         try:
             db_routes = dumps(mongo.db.routes.find({'status': "PENDING"}))
@@ -578,7 +576,6 @@ class AvailableRoutesController(Resource):
 @api.route("/api/v1/routes/request/<string:route_id>")
 class RequestRoutesController(Resource):
     @api.expect(coordinates)
-    @requires_auth
     def post(self, route_id):
         driver_id = request.json.get('driver_id')
         if driver_id:
@@ -605,7 +602,6 @@ class RequestRoutesController(Resource):
 
 @api.route("/api/v1/routes/answerRequest/<string:route_id>")
 class AnswerRoutesRequestController(Resource):
-    @requires_auth
     def post(self, route_id):
         accepted = request.json.get('accepted')
         route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
@@ -635,7 +631,6 @@ class AnswerRoutesRequestController(Resource):
 
 @api.route("/api/v1/routes/start/<string:route_id>")
 class StartRoutesController(Resource):
-    @requires_auth
     def post(self, route_id):
             route_to_start = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
             if route_to_start:
@@ -655,20 +650,74 @@ class StartRoutesController(Resource):
 
 @api.route("/api/v1/routes/finish/<string:route_id>")
 class FinishRoutesController(Resource):
-    @requires_auth
     def post(self, route_id):
         route_to_request = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
         if route_to_request:
-            mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"status": "FINISHED", "finishTimeStamp": datetime.datetime.now()}})
-            #notificacion firebase a passenger
-            passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
-            route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
+            print("driver_id: ", route_to_request.get("driver_id"))
+            print("passenger_id: ", route_to_request.get("passenger_id"))
+            print("lat_Start: ", route_to_request.get("route").get("legs")[0].get("start_location").get("lat"))
+            print("lon_Start: ", route_to_request.get("route").get("legs")[0].get("start_location").get("lng"))
+            print("lat_End: ", route_to_request.get("route").get("legs")[0].get("end_location").get("lat"))
+            print("lat_End: ", route_to_request.get("route").get("legs")[0].get("end_location").get("lng"))
+            print("distance: ", route_to_request.get("route").get("legs")[0].get("distance").get("value"))
+            ss_trip = requests.post(ss_url + "/api/trips", headers={'token': app_token},
+                                    json= {
+                                            "trip": {
+                                                "driver": route_to_request.get("driver_id"),
+                                                "passenger": route_to_request.get("passenger_id"),
+                                                "start": {
+                                                    "address": {
+                                                        "location": {
+                                                            "lat": route_to_request.get("route").get("legs")[0].get("start_location").get("lat"),
+                                                            "lon": route_to_request.get("route").get("legs")[0].get("start_location").get("lng")
+                                                        }
+                                                    },
+                                                    "timestamp": 0
+                                                },
+                                                "end": {
+                                                    "address": {
+                                                        "location": {
+                                                            "lat": route_to_request.get("route").get("legs")[0].get(
+                                                                "end_location").get("lat"),
+                                                            "lon": route_to_request.get("route").get("legs")[0].get(
+                                                                "end_location").get("lng")
+                                                        }
+                                                    },
+                                                    "timestamp": 0
+                                                }
+                                                ,
+                                                "totalTime": 0,
+                                                "waitTime": 0,
+                                                "totalTime": 0,
+                                                "distance": route_to_request.get("route").get("legs")[0].get("distance").get("value"),
+                                                "route": [
+                                                    {
+                                                        "location": {
+                                                            "lat": 0,
+                                                            "lon": 0
+                                                        },
+                                                        "timestamp": 0
+                                                    }
+                                                ],
+                                                "cost": {
+                                                    "currency": "ARS"
+                                                }
+                                            },
+                                            "paymethod": {}
+                                        })
+            if ss_trip.status_code == 201:
 
-            message_title = "Llevame"
-            message_body = "Tu viaje ha finalizado."
-            result = push_service.notify_single_device(registration_id=passenger_token, message_body=message_body, data_message=json.loads(dumps(route_to_request)))
+                mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"status": "FINISHED", "finishTimeStamp": datetime.datetime.now()}})
+                #notificacion firebase a passenger
+                passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
+                route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
 
-            return json.loads(dumps(route_to_request)), 200
+                message_title = "Llevame"
+                message_body = "Tu viaje ha finalizado."
+                result = push_service.notify_single_device(registration_id=passenger_token, message_body=message_body, data_message=json.loads(dumps(route_to_request)))
+                return {'message': 'Viaje finalizado con exito.'}, 200
+            else:
+                return {'error': 'No se pudo terminar el viaje.'}, 500, {'Content-type': 'application/json'}
         else:
             return {'error': 'Bad Request, no route found.'}, 400, {'Content-type': 'application/json'}
 
@@ -701,7 +750,7 @@ class UsersPayController(Resource):
                 else:
                     return {'error': 'Su pago no se pudo registrar con exito.'}, 500, {'Content-type': 'application/json'}
             else:
-                return {'error': 'Bad Request, amount parameter needed'}, 400, {'Content-type': 'application/json'}
+                return {'error': 'Bad Request, amount parameter needed.'}, 400, {'Content-type': 'application/json'}
         else:
             return {'error': 'Bad Request, user_id invalid.'}, 400, {'Content-type': 'application/json'}
 
