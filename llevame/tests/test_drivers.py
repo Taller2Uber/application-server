@@ -31,7 +31,7 @@ class AuthTestCase(unittest.TestCase):
 
     def test_get_drivers(self):
         """"Test case for obtaining drivers """
-        res = self.app.get('/api/v1/drivers')
+        res = self.app.get('/api/v1/drivers', headers={ 'authorization' : ''})
         result = json.loads(res.data.decode())
         self.assertEqual(result, {'error': 'Log in and send token on header'})   
         self.assertEqual(res.status_code, 401)
