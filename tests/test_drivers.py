@@ -18,7 +18,7 @@ class DriverMock(object):
         self.status_code = status_code
 
 
-class AuthTestCase(unittest.TestCase):
+class DriversTestCase(unittest.TestCase):
     """Initialize empty drivers db."""
     def setUp(self):
         """Set up test variables."""
@@ -29,14 +29,34 @@ class AuthTestCase(unittest.TestCase):
             # within this block, current_app points to app.
             llevame.mongo.db.drivers.delete_many({})
 
-    #def test_get_drivers(self):
-        #""Test case for obtaining drivers """
-        #res = self.app.get('/api/v1/drivers', headers={ 'authorization' : ''})
-        #result = json.loads(res.data.decode())
-        #self.assertEqual(result, {'error': 'Log in and send token on header'})   
-        #self.assertEqual(res.status_code, 401)
+    def test_get(self):
+        driver = {'ss_id': 1, 'username': 'test', 'password': 'test'}
+        with llevame.app.app_context():
+            llevame.mongo.db.drivers.insert(driver)
+        the_response = Mock(spec=Response)
+        the_response.content = {"user": {"id": "1","type": "driver"}}
+        the_response.status_code = 200
+        SharedServer.validateUser = MagicMock(return_value=the_response)
+        token = self.app.post('/api/v1/users/login', data=json.dumps({'user_name': 'test', 'password': 'test'}))
+        """Test case for obtaining drivers """
+        res = self.app.get('/api/v1/drivers', headers={ 'authorization' : token.headers.get('authorization')})
+        result = json.loads(res.data.decode())
+        self.assertEqual(res.status_code, 200)
 
-    def test_create_driver(self):
+    def test_get_by_id(self):
+        driver = {'ss_id': 1, 'username': 'test', 'password': 'test'}
+        with llevame.app.app_context():
+            llevame.mongo.db.drivers.insert(driver)
+        test_driver = DriverMock({'user_name': 'test', 'password': 'test'}, 200)
+        the_response = Mock(spec=Response)
+        the_response.content = json.dumps({'user': {'id': '1', "type": 'driver'}})
+        the_response.status_code = 200
+        SharedServer.validateUser = MagicMock(return_value=the_response)
+        token = self.app.post('/api/v1/users/login', data=test_driver.content, content_type='application/json')
+        res = self.app.get('/api/v1/drivers/1', headers={ 'authorization' : token.headers.get('authorization')})
+        self.assertEqual(res.status_code, 200)
+
+    def test_creat(self):
         """Test case for creating a driver """
         test_driver = DriverMock({'user': { "username":"fncaldora","password":"yoursister","firstname":"Facundo","lastname":"Caldora","country":"Argentina","email":"facundo.caldoragmail.com","birthdate":"26/02/1990"}}, 201)
         the_response = Mock(spec=Response)
