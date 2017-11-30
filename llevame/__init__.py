@@ -202,14 +202,18 @@ def km():
 
 
 def kmRoute():
-    routes_in_progress = mongo.db.routes.find({"status": "IN_PROGRESS"})
-    if routes_in_progress:
-        for route in range (0,routes_in_progress.len -1):
-            passenger = mongo.db.passengers.find({"ss_id": route.get('passeger_id')})
-            driver = mongo.db.drivers.find({"ss_id": route.get('driver_id')})
-            distance = calculateDistance(passenger.get("latitude"), passenger.get("longitude"), driver.get("latitude"), driver.get("longitude"))
-            if (distance > ALLOWED_DISTANCE):
-                notifySeparation(route)
+    with app.app_context():
+        routes_in_progress = json.loads(dumps(mongo.db.routes.find({"status": "IN_PROGRESS"})))
+        print("routes ", routes_in_progress)
+        print("len ", len(routes_in_progress))
+        if len(routes_in_progress) > 0:
+            with app.app_context():
+                for route in range(0, len(routes_in_progress) -1):
+                    passenger = mongo.db.passengers.find({"ss_id": route.get('passeger_id')})
+                    driver = mongo.db.drivers.find({"ss_id": route.get('driver_id')})
+                    distance = calculateDistance(passenger.get("latitude"), passenger.get("longitude"), driver.get("latitude"), driver.get("longitude"))
+                    if (distance > ALLOWED_DISTANCE):
+                        notifySeparation(route)
 
 def calculateDistance(lat1, lon1, lat2, lon2):
     R = 6373.0
@@ -225,15 +229,17 @@ def calculateDistance(lat1, lon1, lat2, lon2):
 
 def notifySeparation(route):
     try:
-        driver = mongo.db.drivers.find({"ss_id": route.get('driver_id')})
-        result = push_service.notify_single_device(registration_id=driver.get("firebase_token"), message_title="Llevame",
+        with app.app_context():
+            driver = mongo.db.drivers.find({"ss_id": route.get('driver_id')})
+            result = push_service.notify_single_device(registration_id=driver.get("firebase_token"), message_title="Llevame",
                                                    message_body={"type": "separationNotif", "content": "Acerquense muchachos."})
     except:
         logging.error('Separation notification failed for driver id: %s', driver['ss_id'])
 
     try:
-        passenger = mongo.db.passengers.find({"ss_id": route.get('passeger_id')})
-        result = push_service.notify_single_device(registration_id=passenger.get("firebase_token"), message_title="Llevame",
+        with app.app_context():
+            passenger = mongo.db.passengers.find({"ss_id": route.get('passeger_id')})
+            result = push_service.notify_single_device(registration_id=passenger.get("firebase_token"), message_title="Llevame",
                                                    message_body={"type": "separationNotif", "content": "Acerquense muchachos."})
     except:
         logging.error('Separation notification failed for passenger id: %s', passenger.get('ss_id'))
