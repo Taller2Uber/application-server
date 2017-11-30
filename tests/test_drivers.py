@@ -52,9 +52,9 @@ class DriversTestCase(unittest.TestCase):
         res = self.app.get('/api/v1/drivers/1', headers={ 'authorization' : token.headers.get('authorization')})
         self.assertEqual(res.status_code, 200)
 
-    def test_creat(self):
+    def test_create(self):
         """Test case for creating a driver """
-        test_driver = DriverMock({'user': { "username":"fncaldora","password":"yoursister","firstname":"Facundo","lastname":"Caldora","country":"Argentina","email":"facundo.caldoragmail.com","birthdate":"26/02/1990"}}, 201)
+        test_driver = DriverMock({'user': { "user_name":"fncaldora","password":"yoursister","firstname":"Facundo","lastname":"Caldora","country":"Argentina","email":"facundo.caldoragmail.com","birthdate":"26/02/1990"}}, 201)
         the_response = Mock(spec=Response)
         the_response.content = test_driver.content
         the_response.status_code = 201
