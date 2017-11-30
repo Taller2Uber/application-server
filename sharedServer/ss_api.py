@@ -16,3 +16,12 @@ class SharedServer:
 
     def validateUser(self, user):
         return requests.post(ss_url + '/api/users/validate', json=user, headers={'token': app_token})
+
+    def createCar(self, driver_id, car):
+        return requests.post(ss_url + '/api/users/' + driver_id + '/cars', json=car, headers={'token': app_token})
+
+    def estimatePrice(self, route):
+        return requests.post(ss_url + '/api/trips/estimate', json=route, headers={'token': app_token})
+
+    def getPaymentMethod(self, passenger_id):
+        return requests.get(ss_url + "/api/users/" + str(passenger_id), headers={'token': app_token})
