@@ -9,8 +9,10 @@ from flask_restplus import Resource, Api, fields
 from flask_pymongo import PyMongo
 from bson.objectid import ObjectId
 from sharedServer.ss_api import SharedServer
+from googleMaps.google_maps import GoogleMaps
 import sharedServer.ss_api
-from pyfcm import FCMNotification
+import googleMaps.google_maps
+#from pyfcm import FCMNotification
 import logging
 import datetime
 import jwt
@@ -34,13 +36,11 @@ app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
 # Configuraciones Shared Server
-with open('config.json') as data_file:
-    conf = json.load(data_file)
 app_token = sharedServer.ss_api.app_token
 ss_url = sharedServer.ss_api.ss_url
-google_token = conf["google_token"]
+google_token = googleMaps.google_maps.google_token
 
-push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
+#push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
 
 
 coordinates = api.model('Google coordinates', {
@@ -336,7 +336,7 @@ class CarsController(Resource):
                     }
                 ]
             }
-            ss_create_car = requests.post(ss_url + '/api/users/' + driver_id + '/cars', json=ss_body, headers={'token': app_token})
+            ss_create_car = SharedServer().createCar(driver_id, ss_body)
 
             if ss_create_car.status_code == 201:
                 db_driver['cars'].append({'brand': request.json.get('brand'),
@@ -386,7 +386,7 @@ class PassengersController(Resource):
             else:
                 passenger = passengers.find_one({'user_name': user_name, 'password': password})
             if not passenger:
-                ss_create_passenger = requests.post(ss_url + '/api/users', json={
+                jsonObject={
                     'type': 'passenger',
                     'username': user_name or 'default',
                     'password': password or 'default',
@@ -397,7 +397,8 @@ class PassengersController(Resource):
                     'country': request.json.get('country') or 'default',
                     'email': request.json.get('email') or 'default',
                     'birthdate': request.json.get('birthday') or '09-09-1970'
-                }, headers={'token': app_token})
+                }
+                ss_create_passenger = SharedServer().createUser(jsonObject)
                 if 201 == ss_create_passenger.status_code:
                     json_response = json.loads(ss_create_passenger.content)
                     created_passenger = json_response.get('user')
@@ -522,10 +523,10 @@ class RoutesController(Resource):
             start_coord = request.json.get('latitude_origin') + ',' + request.json.get('longitude_origin')
             end_coord = request.json.get('latitude_destination') + ',' + request.json.get('longitude_destination')
             if passenger_id and start_coord and end_coord:
-                google_routes = requests.get('https://maps.googleapis.com/maps/api/directions/json?origin=' + start_coord + '&destination=' + end_coord + '&alternatives=true&key=' + google_token)
+                google_routes = GoogleMaps().getRoutes(start_coord, end_coord)
                 response = json.loads(google_routes.content)
                 if google_routes.status_code == 200:
-                    ss_estimated_price = requests.post(ss_url + '/api/trips/estimate', json={
+                    jsonObject={
                               "passenger": passenger_id,
                               "start": {
                                 "address": {
@@ -547,12 +548,13 @@ class RoutesController(Resource):
                               "cost": {
                                 "currency": "ARS"
                               }
-                        }, headers={'token': app_token})
+                        }
+                    ss_estimated_price = SharedServer().estimatePrice(jsonObject)
                     if ss_estimated_price.status_code == 200:
                         response["estimated_price"] = json.loads(ss_estimated_price.content).get('cost').get('value')
                         return response, 200
                     elif ss_estimated_price.status_code == 402:
-                        user_payment = requests.get(ss_url + "/api/users/" + str(passenger_id), headers={'token': app_token})
+                        user_payment = SharedServer().getPaymentMethod(passenger_id)
                         if user_payment.status_code == 200:
                             jlist = json.loads(user_payment.content).get("user").get("balance")
                             balance = None
