@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from unittest import mock
 from unittest.mock import Mock
 from sharedServer.ss_api import SharedServer
+from facebook.facebook import Facebook
 import sharedServer.ss_api
 from requests.models import Response
 
@@ -62,3 +63,16 @@ class PassengersTestCase(unittest.TestCase):
         passengerToCreate = json.dumps({'user_name': 'fncaldora', 'password': 'yoursister'})
         res = self.app.post('/api/v1/passengers', data=passengerToCreate, content_type='application/json')
         self.assertEqual(res.status_code, 201)
+        passengerToCreate = json.dumps({'fb_token': 'testtoken'})
+        facebook_response = Mock(spec=Response)
+        facebook_response.content = json.dumps({'id': 1, 'name': 'Johnny'})
+        facebook_response.status_code = 200
+        Facebook.getUser = MagicMock(return_value=facebook_response.content)
+        res = self.app.post('/api/v1/passengers', data=passengerToCreate, content_type='application/json')
+        self.assertEqual(res.status_code, 201)
+
+    def test_passenger_update(self):
+        token = self.login()
+        passengerToUpdate = json.dumps({'latitude': '25'})
+        res = self.app.put('/api/v1/passengers/1', data=passengerToUpdate,headers={ 'authorization' : token.headers.get('authorization')}, content_type='application/json')
+        self.assertEqual(res.status_code, 200)
