@@ -467,7 +467,7 @@ class UserLoginController(Resource):
                 body = {"username": username, "password": password}
             else:
                 return {'error': 'Bad Request'}, 400
-            ss_response = SharedServer.validateUser(body)
+            ss_response = SharedServer().validateUser(body)
             if ss_response.status_code == 200 :
                 user = json.loads(ss_response.content)
                 response = {}
