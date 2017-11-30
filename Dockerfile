@@ -7,7 +7,7 @@ WORKDIR /llevame
 RUN pip install -r requirements.txt
 RUN useradd -m myuser
 USER myuser
-RUN export MONGO_URL=mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame
+ENV MONGO_URL mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame
 CMD gunicorn --bind 0.0.0.0:$PORT llevame:app
 
 
