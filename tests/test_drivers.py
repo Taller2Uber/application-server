@@ -62,12 +62,13 @@ class DriversTestCase(unittest.TestCase):
 
     def test_create(self):
         """Test case for creating a driver """
-        test_driver = DriverMock({'user': { "user_name":"fncaldora","password":"yoursister","firstname":"Facundo","lastname":"Caldora","country":"Argentina","email":"facundo.caldoragmail.com","birthdate":"26/02/1990"}}, 201)
+        test_driver = DriverMock({'user': { "username":"fncaldora","password":"yoursister","firstname":"Facundo","lastname":"Caldora","country":"Argentina","email":"facundo.caldoragmail.com","birthdate":"26/02/1990"}}, 201)
         the_response = Mock(spec=Response)
         the_response.content = test_driver.content
         the_response.status_code = 201
         SharedServer.createUser = MagicMock(return_value=the_response)
-        res = self.app.post('/api/v1/drivers', data=test_driver.content, content_type='application/json')
+        driverToCreate = json.dumps({'user_name': 'fncaldora', 'password': 'yoursister'})
+        res = self.app.post('/api/v1/drivers', data=driverToCreate, content_type='application/json')
         self.assertEqual(res.status_code, 201)
 
     def test_get_cars(self):
