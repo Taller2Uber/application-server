@@ -181,7 +181,6 @@ def requires_auth(f):
     return decorated
 
 ########################
-
 def ping():
     while True:
         global app_token
@@ -354,6 +353,8 @@ class DriverController(Resource):
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
             if not db_driver:
                 return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
+            if request.json.get('ss_id'):
+                del request.json['ss_id']
             mongo.db.drivers.update_one({'ss_id': int(driver_id)}, {'$set': request.get_json()})
             return json.loads(dumps(mongo.db.drivers.find_one({'ss_id': int(driver_id)}))), 200, {'Content-type': 'application/json'}
         except:
@@ -526,7 +527,6 @@ class PassengerController(Resource):
 class UserLoginController(Resource):
     @api.expect(user_token)
     def post(self):
-        try:
             fb_token = request.json.get('fb_token')
             username = request.json.get('user_name')
             password = request.json.get('password')
@@ -552,8 +552,7 @@ class UserLoginController(Resource):
                         auth_header = {'authorization' : encode_auth_token(id)}
                 return json.loads(dumps(response)), ss_response.status_code, auth_header
             return json.loads(ss_response.content), ss_response.status_code
-        except Exception as e:
-            return {'error': 'Error inesperado ' + e.message}, 500, {'Content-type': 'application/json'}
+
 
 
 @api.route("/api/v1/users/<string:user_id>/debt")
