@@ -1,3 +1,5 @@
 build:
   languages:
     - python
+  run:
+    web: ENV MONGO_URL mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame && gunicorn --bind 0.0.0.0:$PORT llevame:app
