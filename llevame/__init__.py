@@ -12,7 +12,7 @@ from sharedServer.ss_api import SharedServer
 from googleMaps.google_maps import GoogleMaps
 import sharedServer.ss_api
 import googleMaps.google_maps
-#from pyfcm import FCMNotification
+from pyfcm import FCMNotification
 import logging
 import datetime
 import jwt
@@ -42,7 +42,7 @@ app_token = sharedServer.ss_api.app_token
 ss_url = sharedServer.ss_api.ss_url
 google_token = googleMaps.google_maps.google_token
 
-#push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
+push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
 
 
 coordinates = api.model('Google coordinates', {
@@ -641,7 +641,6 @@ class RequestRoutesController(Resource):
                     mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"driver_id": int(driver_id), "status": "WAITING_ACCEPTANCE"}})
                     #notificacion firebase a passenger
                     passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
-                    print(passenger_token)
                     route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
 
 
@@ -715,13 +714,6 @@ class FinishRoutesController(Resource):
     def post(self, route_id):
         route_to_request = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
         if route_to_request:
-            print("driver_id: ", route_to_request.get("driver_id"))
-            print("passenger_id: ", route_to_request.get("passenger_id"))
-            print("lat_Start: ", route_to_request.get("route").get("legs")[0].get("start_location").get("lat"))
-            print("lon_Start: ", route_to_request.get("route").get("legs")[0].get("start_location").get("lng"))
-            print("lat_End: ", route_to_request.get("route").get("legs")[0].get("end_location").get("lat"))
-            print("lat_End: ", route_to_request.get("route").get("legs")[0].get("end_location").get("lng"))
-            print("distance: ", route_to_request.get("route").get("legs")[0].get("distance").get("value"))
             ss_trip = requests.post(ss_url + "/api/trips", headers={'token': app_token},
                                     json= {
                                             "trip": {
@@ -811,16 +803,6 @@ class UsersPayController(Resource):
                 return {'error': 'Bad Request, amount parameter needed.'}, 400, {'Content-type': 'application/json'}
         else:
             return {'error': 'Bad Request, user_id invalid.'}, 400, {'Content-type': 'application/json'}
-
-@api.route("/api/v1/notif")
-class Notifs(Resource):
-    def get(self):
-        #notificacion firebase a passenger
-
-
-        result = push_service.notify_single_device(registration_id="cF5EebuLvXg:APA91bFuGIrUaJ7g-11x4oXzX7Ycxh1NByrYdgIoPxdmZwtLf_aVppFnCdwOujWhSFXQeNlDx6WYm9ZBDySDMjtyM1JRMt7QBOxYIs4ySKeovaTHgE5b3qPxPJtLgAgmeG6VCnpGlfEC", message_title = "Llevame", message_body= {"type":"no-chat","content": "hola"})
-        print("result", result)
-        return "notif", 200
 
 
 if __name__ == "__main__":
