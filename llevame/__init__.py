@@ -34,6 +34,7 @@ api = Api(app)
 
 # Configuracion URI Mongo
 MONGO_URL = os.getenv('MONGO_URL')
+MODE = os.getenv('MODE')
 
 logging.error('using mongo cofiguration on init: %s', MONGO_URL)
 
@@ -189,9 +190,9 @@ def ping():
             app_token = json.loads(ping_response.content).get('token').get('token')
         time.sleep(180)
 
-
-pingThread = threading.Thread(target=ping)
-pingThread.start()
+if MODE == "PRODUCTION":
+    pingThread = threading.Thread(target=ping)
+    pingThread.start()
 
 #####################################
 def km():
@@ -203,8 +204,6 @@ def km():
 def kmRoute():
     with app.app_context():
         routes_in_progress = json.loads(dumps(mongo.db.routes.find({"status": "IN_PROGRESS"})))
-        print("routes ", routes_in_progress)
-        print("len ", len(routes_in_progress))
         if len(routes_in_progress) > 0:
             with app.app_context():
                 for route in range(0, len(routes_in_progress) -1):
@@ -241,9 +240,9 @@ def notifySeparation(route):
     except:
         logging.error('Separation notification failed for passenger id: %s', passenger.get('ss_id'))
 
-
-kmThread = threading.Thread(target=km)
-kmThread.start()
+if MODE == "PRODUCTION":
+    kmThread = threading.Thread(target=km)
+    kmThread.start()
 
 
 ########################
@@ -355,7 +354,6 @@ class DriverController(Resource):
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
             if not db_driver:
                 return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
-            print("actualizando pasajero - ", request.json)
             mongo.db.drivers.update_one({'ss_id': int(driver_id)}, {'$set': request.get_json()})
             return json.loads(dumps(mongo.db.drivers.find_one({'ss_id': int(driver_id)}))), 200, {'Content-type': 'application/json'}
         except:
@@ -518,7 +516,6 @@ class PassengerController(Resource):
             db_passenger = mongo.db.passengers.find_one({'ss_id': int(passenger_id)})
             if not db_passenger:
                 return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
-            print("actualizando pasajero - ", request.json)
             mongo.db.passengers.update_one({'ss_id': int(passenger_id)}, {'$set': request.get_json()})
             return json.loads(dumps(mongo.db.passengers.find_one({'ss_id': int(passenger_id)}))), 200, {'Content-type': 'application/json'}
         except:
@@ -738,7 +735,6 @@ class StartRoutesController(Resource):
     @requires_auth
     def post(self, route_id):
             route_to_start = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
-            print (route_to_start)
             if route_to_start:
                 passenger = mongo.db.passengers.find_one({'ss_id': int(route_to_start.get('passenger_id'))})
                 driver = mongo.db.drivers.find_one({'ss_id': int(route_to_start.get('driver_id'))})
