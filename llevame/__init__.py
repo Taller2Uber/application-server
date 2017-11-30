@@ -15,6 +15,8 @@ import logging
 import datetime
 import jwt
 import json
+import threading
+import time
 
 # Configuracion de logs
 logging.basicConfig(filename='application.log', level=logging.ERROR, format='%(asctime)s %(message)s',
@@ -146,13 +148,6 @@ def decode_auth_token(auth_token):
     except jwt.InvalidTokenError:
         return 'Invalid token. Please log in again.'
 
-def get_cache(str):
-    var = cache.get(str)
-    if not var:
-        return "NOT_SET_YET"
-    return var
-
-
 def check_auth(ss_id):
     """This function is called to check if ss_id is valid.
     """
@@ -181,6 +176,21 @@ def requires_auth(f):
             return authenticate()
         return f(*args, **kwargs)
     return decorated
+
+########################
+
+def ping():
+    while True:
+        global app_token
+        ping_response = requests.post(ss_url + '/api/servers/ping', headers={'token': app_token})
+
+        if ping_response.status_code == 200:
+            app_token = json.loads(ping_response.content).get('token').get('token')
+        time.sleep(180)
+
+
+pingThread = threading.Thread(target=ping)
+pingThread.start()
 
 ########################
 
@@ -225,8 +235,10 @@ class DriversController(Resource):
                     first_name = fb_body.get('name')
                 else:
                     return fb_body, 400
+            elif user_name and password:
+                driver = drivers.find_one({'user_name': user_name})
             else:
-                driver = drivers.find_one({'user_name': user_name, 'password': password})
+                return {'error': 'Bad parameters.'}, 400, {'Content-type': 'application/json'}
             if not driver:
                 jsonBody={
                     'type': 'driver',
@@ -249,6 +261,7 @@ class DriversController(Resource):
                         '_ref': created_driver.get('_ref'),
                         'fb_id': fb_id,
                         'firebase_token': firebase_token,
+                        'user_name': created_driver.get('username'),
                         'first_name': created_driver.get('firstname'),
                         'last_name': created_driver.get('lastname'),
                         'email': created_driver.get('email'),
@@ -383,8 +396,10 @@ class PassengersController(Resource):
                     passenger = passengers.find_one({'fb_id': fb_id})
                 else:
                     return fb_body, 400
+            elif user_name and password:
+                passenger = passengers.find_one({'user_name': user_name})
             else:
-                passenger = passengers.find_one({'user_name': user_name, 'password': password})
+                return {'error': 'Bad parameters.'}, 400, {'Content-type': 'application/json'}
             if not passenger:
                 ss_create_passenger = requests.post(ss_url + '/api/users', json={
                     'type': 'passenger',
@@ -406,6 +421,7 @@ class PassengersController(Resource):
                         '_ref': created_passenger.get('_ref'),
                         'fb_id': fb_id,
                         'firebase_token': firebase_token,
+                        'user_name': created_passenger.get('username'),
                         'first_name': created_passenger.get('firstname'),
                         'last_name': created_passenger.get('lastname'),
                         'email': created_passenger.get('email'),
@@ -616,13 +632,14 @@ class RequestRoutesController(Resource):
     def post(self, route_id):
         driver_id = request.json.get('driver_id')
         if driver_id:
-            driver = mongo.db.drivers.find_one({'ss_id': driver_id})
+            driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
             if driver:
                 route_to_request = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
                 if route_to_request:
-                    mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"driver_id": driver_id, "status": "WAITING_ACCEPTANCE"}})
+                    mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"driver_id": int(driver_id), "status": "WAITING_ACCEPTANCE"}})
                     #notificacion firebase a passenger
                     passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
+                    print(passenger_token)
                     route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
 
 
@@ -799,10 +816,10 @@ class Notifs(Resource):
         #notificacion firebase a passenger
 
 
-        result = push_service.notify_single_device(registration_id="dFUsCR3KbKw:APA91bGCf9XOniAWV-MblDvnTvi_vYuLMBCquNnSCmfVWsTN3yM-lSeE_sxtBFfc92Bk2GI3PNA46eeAiFqAilh4h39BvK-fP20u7dekMSPHCHe-NmXhxVg8nuZVGA8lUjw5z9PcGFfF", message_title = "Llevame", message_body={"type":"no-chat","content": {"driver":"juan"}})
-
+        result = push_service.notify_single_device(registration_id="cF5EebuLvXg:APA91bFuGIrUaJ7g-11x4oXzX7Ycxh1NByrYdgIoPxdmZwtLf_aVppFnCdwOujWhSFXQeNlDx6WYm9ZBDySDMjtyM1JRMt7QBOxYIs4ySKeovaTHgE5b3qPxPJtLgAgmeG6VCnpGlfEC", message_title = "Llevame", message_body= {"type":"no-chat","content": "hola"})
+        print("result", result)
         return "notif", 200
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5000)
