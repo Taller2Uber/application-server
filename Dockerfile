@@ -9,5 +9,3 @@ RUN useradd -m myuser
 USER myuser
 ENV MONGO_URL mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame
 CMD gunicorn --bind 0.0.0.0:$PORT llevame:app
-
-
