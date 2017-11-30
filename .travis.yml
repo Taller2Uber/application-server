@@ -6,7 +6,7 @@ install:
 script:
 - export MONGO_URL=mongodb://root:qmsroot@ds147681.mlab.com:47681/llevame_test
 - export PYTHONPATH=/home/travis/build/Taller2Uber/application-server/
-- pytest tests/ --cov=llevame
+- pytest tests/ --cov=llevame --cov=sharedServer --cov=googleMaps --cov=facebook --cov=fcm
 after_success:
 - codecov
 deploy:
