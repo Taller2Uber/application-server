@@ -1,22 +1,19 @@
 language: python
 python:
-  - "3.5"
-
+- '3.5'
 install:
-  - pip install -r requirements.txt
-
-script: 
-  - export MONGO_URL=mongodb://root:qmsroot@ds147681.mlab.com:47681/llevame_test
-  - export PYTHONPATH=/home/travis/build/Taller2Uber/application-server/
-  - pytest tests/ --cov=llevame
-
+- pip install -r requirements.txt
+script:
+- export MONGO_URL=mongodb://root:qmsroot@ds147681.mlab.com:47681/llevame_test
+- export PYTHONPATH=/home/travis/build/Taller2Uber/application-server/
+- pytest tests/ --cov=llevame
 after_success:
-  - codecov
-
+- codecov
 deploy:
   provider: heroku
   api_key:
-    secure: "fdf87151-fe53-49a7-8f2d-c88c4c788ad6"
-    app: llevame-taller2
+    secure: h6K4YFM4sMi7nFcpnQ2JnT6tZBKuWqQH9Cg9Cf+tm8N8Dr1xtrEGM4o+ZeS51DhBrStiA6dbxS1xxNDc6M9hqIp0PGBrgXikhaNnPI3WnYzfF6dQSskV3w+PAeW0HDiOq+W83Le6/b1uaEBnwedn1q37ADH1PB0IZKrFbP0+3inHSQLvRM9IYIqtTnXtypR0PwX45kLAxIfjjmhk4KM738lHZT5Cj8LfnDspbz1jz0Ho9DnGDeAXEVsQQn3YI0e2XE4754ajzNBlx30M/ZoRuVPCH5nXv7UcmQ33TwGU57bO2uHST2xt04dhSFhdT76qxf7RN97UxvWlkXEviucmGcZ4XHb6oSBPce3Nh2akHvym0JpCKNCcW9TewT8cDFHyiZAzSHbJqBP8okLIE/wghdwM85QLu8BDUA6639C4Cw1Fva+Duk+MJlzxh1PwdiW9UucXNiyzA4GnDi/WRWR3NeppgCAR1Y++RbCE4wSmoz03gtU1CiehL1aamR37eKCZKLmtfnvyqzTouwaROEhKrX5E2iHqQV4onrztpH91YJbTXsMPKZ4okfAVl4tNfWYBQBxcAnZNgHnOW5Ar/ssYxltHwQhbyDwIKP5QHjNJZWTQ7W6xX77hVlj38BojqqQbYkrxEDrmi0rXl1FO9AvtZosuFekO9Y7SLPeOtnsFVYo=
+  app:
+    llevame-taller2
   run:
-    - heroku container:push web --app llevame-taller2
+  - heroku container:push web --app llevame-taller2
