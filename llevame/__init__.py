@@ -12,7 +12,7 @@ from sharedServer.ss_api import SharedServer
 from googleMaps.google_maps import GoogleMaps
 import sharedServer.ss_api
 import googleMaps.google_maps
-#from pyfcm import FCMNotification
+from pyfcm import FCMNotification
 import logging
 import datetime
 import jwt
@@ -42,7 +42,7 @@ app_token = sharedServer.ss_api.app_token
 ss_url = sharedServer.ss_api.ss_url
 google_token = googleMaps.google_maps.google_token
 
-#push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
+push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
 
 
 coordinates = api.model('Google coordinates', {
