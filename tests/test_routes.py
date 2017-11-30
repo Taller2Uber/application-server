@@ -30,7 +30,7 @@ class RoutesMock(object):
 class RoutesTestCase(unittest.TestCase):
 
     def login(self):
-        passenger = {'ss_id': 1, 'username': 'test', 'password': 'test', 'cars': []}
+        passenger = {'ss_id': 1, 'username': 'test', 'password': 'test', 'cars': [], 'latitude': "-34.56699", 'longitude': "-58.47636"}
         with llevame.app.app_context():
             llevame.mongo.db.passengers.delete_many({})
             llevame.mongo.db.passengers.insert(passenger)
@@ -47,6 +47,7 @@ class RoutesTestCase(unittest.TestCase):
         """Set up test variables."""
         self.app = llevame.app.test_client()
         self.app.testing = True
+        llevame.not_testing = False
         llevame.sharedServer.ss_api.ss_url = 'http://localhost:8000'
         with llevame.app.app_context():
             # within this block, current_app points to app.
@@ -128,7 +129,7 @@ class RoutesTestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
 
     def test_start_route(self):
-        route = {'from': 'corea', 'to': 'mongolia', 'passenger_id': 1}
+        route = {'from': 'corea', 'to': 'mongolia', 'passenger_id': 1, 'driver_id': 1}
         with llevame.app.app_context():
             llevame.mongo.db.routes.delete_many({})
             llevame.mongo.db.routes.insert(route)
