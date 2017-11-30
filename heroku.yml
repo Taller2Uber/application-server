@@ -1,5 +1,3 @@
 build:
   languages:
     - python
-run:
-  web: heroku container:push web --app llevame-taller2
