@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from unittest import mock
 from unittest.mock import Mock
 from sharedServer.ss_api import SharedServer
+from facebook.facebook import Facebook
 import sharedServer.ss_api
 from requests.models import Response
 
@@ -70,6 +71,13 @@ class DriversTestCase(unittest.TestCase):
         driverToCreate = json.dumps({'user_name': 'fncaldora', 'password': 'yoursister'})
         res = self.app.post('/api/v1/drivers', data=driverToCreate, content_type='application/json')
         self.assertEqual(res.status_code, 201)
+        driverToCreate = json.dumps({'fb_token': 'testtoken'})
+        facebook_response = Mock(spec=Response)
+        facebook_response.content = json.dumps({'id': 1, 'name': 'Johnny'})
+        facebook_response.status_code = 200
+        Facebook.getUser = MagicMock(return_value=facebook_response.content)
+        res = self.app.post('/api/v1/drivers', data=driverToCreate, content_type='application/json')
+        self.assertEqual(res.status_code, 201)
 
     def test_get_cars(self):
         """Test case for creating a car for a driver"""
@@ -85,4 +93,24 @@ class DriversTestCase(unittest.TestCase):
         the_response.content = test_car.content
         the_response.status_code = 201
         SharedServer.createCar = MagicMock(return_value=the_response)
-        res = self.app.post('/api/v1/drivers/1/cars', data=test_car.content, content_type='application/json')
+        res = self.app.post('/api/v1/drivers/1/cars', data=test_car.content, headers={ 'authorization' : token.headers.get('authorization')}, content_type='application/json')
+        self.assertEqual(res.status_code, 201)
+
+    def test_driver_update(self):
+        token = self.login()
+        driverToUpdate = json.dumps({'latitude': '25'})
+        res = self.app.put('/api/v1/drivers/1', data=driverToUpdate,headers={ 'authorization' : token.headers.get('authorization')}, content_type='application/json')
+        self.assertEqual(res.status_code, 200)
+
+    def test_driver_debt(self):
+        token = self.login()
+        balance_response = Mock(spec=Response)
+        balance_response.content = json.dumps({'user': { 'balance': [{ 'currency': 'ARS', 'value': 0}]}})
+        balance_response.status_code = 200
+        SharedServer.getDebt = MagicMock(return_value=balance_response)
+        pay_response = Mock(spec=Response)
+        pay_response.content = json.dumps({'paymethods': []})
+        pay_response.status_code = 200
+        SharedServer.getPayMethods = MagicMock(return_value=pay_response)
+        res = self.app.get('/api/v1/users/1/debt', headers={ 'authorization' : token.headers.get('authorization')})
+        self.assertEqual(res.status_code, 200)

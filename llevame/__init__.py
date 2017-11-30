@@ -10,9 +10,10 @@ from flask_pymongo import PyMongo
 from bson.objectid import ObjectId
 from sharedServer.ss_api import SharedServer
 from googleMaps.google_maps import GoogleMaps
+from facebook.facebook import Facebook
+from fcm.fcm import FCM
 import sharedServer.ss_api
 import googleMaps.google_maps
-from pyfcm import FCMNotification
 import logging
 import datetime
 import jwt
@@ -41,8 +42,6 @@ mongo = PyMongo(app)
 app_token = sharedServer.ss_api.app_token
 ss_url = sharedServer.ss_api.ss_url
 google_token = googleMaps.google_maps.google_token
-
-push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
 
 
 coordinates = api.model('Google coordinates', {
@@ -226,8 +225,7 @@ class DriversController(Resource):
             driver = None
             first_name = request.json.get('first_name')
             if fb_token:
-                fb_response = requests.get(
-                    'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name').content
+                fb_response = Facebook().getUser(fb_token)
                 fb_body = json.loads(fb_response)
                 if 'error' not in fb_body:
                     fb_id = fb_body.get("id")
@@ -387,8 +385,7 @@ class PassengersController(Resource):
             first_name = request.json.get('first_name')
             passenger = None
             if fb_token:
-                fb_response = requests.get(
-                    'https://graph.facebook.com/me?access_token=' + fb_token + '&fields=name').content
+                fb_response = Facebook().getUser(fb_token)
                 fb_body = json.loads(fb_response)
                 if 'error' not in fb_body:
                     fb_id = fb_body.get("id")
@@ -511,7 +508,7 @@ class DebtController(Resource):
         passenger = mongo.db.passengers.find_one({"ss_id": int(user_id)})
         driver = mongo.db.drivers.find_one({"ss_id": int(user_id)})
         if passenger or driver:
-            ss_user = requests.get(ss_url + "/api/users/" + user_id, headers={'token': app_token})
+            ss_user = SharedServer().getDebt(user_id)
 
             if ss_user.status_code == 200:
                 jlist = json.loads(ss_user.content).get("user").get("balance")
@@ -520,7 +517,7 @@ class DebtController(Resource):
                     if (jlist[x].get("currency")) == "ARS":
                         balance = jlist[x].get("value")
 
-                methods = requests.get(ss_url + "/api/paymethods", headers={'token': app_token})
+                methods = SharedServer().getPayMethods()
                 if methods.status_code == 200:
                     return {'paymethods': json.loads(methods.content).get("paymethods"), "balance": balance}, 200, {'Content-type': 'application/json'}
                 else:
@@ -644,7 +641,7 @@ class RequestRoutesController(Resource):
                     route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
 
 
-                    result = push_service.notify_single_device(registration_id=passenger_token, message_title="Llevame", message_body= {"type": "driverConfirmedRoute", "content": route_id})
+                    result = FCM().sendNotification(passenger_token, route_id, "driverConfirmedRoute")
 
                     return json.loads(dumps(route_to_request)), 200
                 else:
@@ -667,11 +664,11 @@ class AnswerRoutesRequestController(Resource):
                     if accepted:
                         mongo.db.routes.update_one({"_id": ObjectId(route_id)}, {'$set': {"driver_id": route_to_request.get('driver_id'), "status": "ACCEPTED"}})
                         #notificacion firebase a passenger
-                        result = push_service.notify_single_device(registration_id=driver.get('firebase_token'), message_title="Llevame", message_body= {"type": "passengerConfirmedDriver", "content": route_id})
+                        result = FCM().sendNotification(driver.get('firebase_token'), route_id, "passengerConfirmedDriver") 
                         return {'message': 'Ruta confirmada con exito, aguarde al chofer.'}, 200, {'Content-type': 'application/json'}
                     else:
                         mongo.db.routes.update_one({"_id": ObjectId(route_id)}, {'$set': {"driver_id": None, "status": "PENDING"}})
-                        result = push_service.notify_single_device(registration_id=driver.get('firebase_token'), message_title="Llevame", message_body= {"type": "passengerRejectedDriver", "content": route_id})
+                        result = FCM().sendNotification(driver.get('firebase_token'), route_id, "passengerRejectedDriver")
                         return {'message': 'Ruta rechazada con exito, aguarde a que otro chofer elija esta ruta.'}, 200, {'Content-type': 'application/json'}
                     return {'error': 'Not route found with those passenger and driver id.'}, 400, {'Content-type': 'application/json'}
                 else:
@@ -685,13 +682,14 @@ class StartRoutesController(Resource):
     @requires_auth
     def post(self, route_id):
             route_to_start = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
+            print (route_to_start)
             if route_to_start:
                 mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"status": "IN_PROGRESS", "initTimeStamp": datetime.datetime.now()}})
                 #notificacion firebase a passenger
                 passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_start.get('passenger_id'))}).get("firebase_token")
                 route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
-                result = push_service.notify_single_device(registration_id=passenger_token, message_title="Llevame", message_body= {"type": "driverStartedRoute", "content": route_id})
-
+                result = FCM().sendNotification(passenger_token, route_id, "driverStartedRoute")
+                
                 return json.loads(dumps(route_to_request)), 200
             else:
                 return {'error': 'Internal server error, no route found.'}, 500, {'Content-type': 'application/json'}

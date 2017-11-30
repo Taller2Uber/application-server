@@ -25,3 +25,9 @@ class SharedServer:
 
     def getPaymentMethod(self, passenger_id):
         return requests.get(ss_url + "/api/users/" + str(passenger_id), headers={'token': app_token})
+
+    def getDebt(self, user_id):
+        return requests.get(ss_url + "/api/users/" + user_id, headers={'token': app_token})
+
+    def getPayMethods(self):
+        return requests.get(ss_url + "/api/paymethods", headers={'token': app_token})
