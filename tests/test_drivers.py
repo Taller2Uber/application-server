@@ -67,7 +67,8 @@ class DriversTestCase(unittest.TestCase):
         the_response.content = test_driver.content
         the_response.status_code = 201
         SharedServer.createUser = MagicMock(return_value=the_response)
-        res = self.app.post('/api/v1/drivers', data=test_driver.content, content_type='application/json')
+        driverToCreate = json.dumps({'user_name': 'fncaldora', 'password': 'yoursister'})
+        res = self.app.post('/api/v1/drivers', data=driverToCreate, content_type='application/json')
         self.assertEqual(res.status_code, 201)
 
     def test_get_cars(self):

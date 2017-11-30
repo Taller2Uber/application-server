@@ -59,5 +59,6 @@ class PassengersTestCase(unittest.TestCase):
         the_response.content = test_passenger.content
         the_response.status_code = 201
         SharedServer.createUser = MagicMock(return_value=the_response)
-        res = self.app.post('/api/v1/passengers', data=test_passenger.content, content_type='application/json')
+        passengerToCreate = json.dumps({'user_name': 'fncaldora', 'password': 'yoursister'})
+        res = self.app.post('/api/v1/passengers', data=passengerToCreate, content_type='application/json')
         self.assertEqual(res.status_code, 201)
