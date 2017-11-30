@@ -15,4 +15,4 @@ class SharedServer:
         return requests.post(ss_url + '/api/users', json=user, headers={'token': app_token})
 
     def validateUser(self, user):
-        return requests.post(ss_url + '/api/validate', json=user, headers={'token': app_token})
+        return requests.post(ss_url + '/api/users/validate', json=user, headers={'token': app_token})

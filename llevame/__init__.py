@@ -192,6 +192,7 @@ class index(Resource):
 @api.route('/api/v1/drivers')
 class DriversController(Resource):
     @api.response(200, 'Success')
+    @requires_auth
     def get(self):
         try:
             args = driver_parser.parse_args()
@@ -454,7 +455,6 @@ class PassengerController(Resource):
 
 @api.route("/api/v1/users/login")
 class UserLoginController(Resource):
-
     @api.expect(user_token)
     def post(self):
         try:
@@ -489,6 +489,7 @@ class UserLoginController(Resource):
 
 @api.route("/api/v1/users/<string:user_id>/debt")
 class DebtController(Resource):
+    @requires_auth
     def get(self, user_id):
         passenger = mongo.db.passengers.find_one({"ss_id": int(user_id)})
         driver = mongo.db.drivers.find_one({"ss_id": int(user_id)})
@@ -570,18 +571,19 @@ class RoutesController(Resource):
                 return {'error': 'Bad parameters, passenger, start and end needed'}, 400, {'Content-type': 'application/json'}
 
 
-@api.response(200, 'Success')
-@requires_auth
-def get(self):
-    try:
-        db_routes = dumps(mongo.db.routes.find())
-        return json.loads(db_routes), 200, {'Content-type': 'application/json'}
-    except:
-        return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
+    @api.response(200, 'Success')
+    @requires_auth
+    def get(self):
+        try:
+            db_routes = dumps(mongo.db.routes.find())
+            return json.loads(db_routes), 200, {'Content-type': 'application/json'}
+        except:
+            return {'error': 'Error inesperado'}, 500, {'Content-type': 'application/json'}
 
 
 @api.route("/api/v1/routes/confirm")
 class ConfirmRoutesController(Resource):
+    @requires_auth
     def post(self):
         try:
             route = request.json.get('route')
@@ -599,6 +601,7 @@ class ConfirmRoutesController(Resource):
 @api.route("/api/v1/routes/availables")
 class AvailableRoutesController(Resource):
     @api.response(200, 'Success')
+    @requires_auth
     def get(self):
         try:
             db_routes = dumps(mongo.db.routes.find({'status': "PENDING"}))
@@ -608,6 +611,7 @@ class AvailableRoutesController(Resource):
 
 @api.route("/api/v1/routes/request/<string:route_id>")
 class RequestRoutesController(Resource):
+    @requires_auth
     @api.expect(coordinates)
     def post(self, route_id):
         driver_id = request.json.get('driver_id')
@@ -634,6 +638,7 @@ class RequestRoutesController(Resource):
 
 @api.route("/api/v1/routes/answerRequest/<string:route_id>")
 class AnswerRoutesRequestController(Resource):
+    @requires_auth
     def post(self, route_id):
         accepted = request.json.get('accepted')
         route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
@@ -659,6 +664,7 @@ class AnswerRoutesRequestController(Resource):
 
 @api.route("/api/v1/routes/start/<string:route_id>")
 class StartRoutesController(Resource):
+    @requires_auth
     def post(self, route_id):
             route_to_start = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
             if route_to_start:
@@ -675,6 +681,7 @@ class StartRoutesController(Resource):
 
 @api.route("/api/v1/routes/<string:route_id>")
 class SpecificRoutesController(Resource):
+    @requires_auth
     def get(self, route_id):
         route = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
         if route:
@@ -685,6 +692,7 @@ class SpecificRoutesController(Resource):
 
 @api.route("/api/v1/routes/finish/<string:route_id>")
 class FinishRoutesController(Resource):
+    @requires_auth
     def post(self, route_id):
         route_to_request = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
         if route_to_request:
@@ -754,6 +762,7 @@ class FinishRoutesController(Resource):
 
 @api.route("/api/v1/users/<string:user_id>/pay")
 class UsersPayController(Resource):
+    @requires_auth
     def post(self, user_id):
         passenger = mongo.db.passengers.find_one({"ss_id": int(user_id)})
         driver = mongo.db.drivers.find_one({"ss_id": int(user_id)})
