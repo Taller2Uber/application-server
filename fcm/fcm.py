@@ -1,4 +1,4 @@
-#from pyfcm import FCMNotification
+from pyfcm import FCMNotification
 
 
 class FCM:
