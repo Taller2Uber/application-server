@@ -19,6 +19,8 @@ import jwt
 import json
 import threading
 import time
+from math import sin, cos, sqrt, atan2, radians
+
 
 # Configuracion de logs
 logging.basicConfig(filename='application.log', level=logging.ERROR, format='%(asctime)s %(message)s',
@@ -44,6 +46,7 @@ google_token = googleMaps.google_maps.google_token
 
 push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
 
+ALLOWED_DISTANCE = 0.25
 
 coordinates = api.model('Google coordinates', {
     'latitude_origin': fields.String(required=True, description='Start point latitude'),
@@ -191,6 +194,55 @@ def ping():
 
 pingThread = threading.Thread(target=ping)
 pingThread.start()
+
+#####################################
+def km():
+    while True:
+        kmRoute()
+        time.sleep(120)
+
+
+def kmRoute():
+    routes_in_progress = mongo.db.routes.find({"status": "IN_PROGRESS"})
+    if routes_in_progress:
+        for route in range (0,routes_in_progress.len -1):
+            passenger = mongo.db.passengers.find({"ss_id": route.get('passeger_id')})
+            driver = mongo.db.drivers.find({"ss_id": route.get('driver_id')})
+            distance = calculateDistance(passenger.get("latitude"), passenger.get("longitude"), driver.get("latitude"), driver.get("longitude"))
+            if (distance > ALLOWED_DISTANCE):
+                notifySeparation(route)
+
+def calculateDistance(lat1, lon1, lat2, lon2):
+    R = 6373.0
+    lat1 = radians(float(lat1))
+    lon1 = radians(float(lon1))
+    lat2 = radians(float(lat2))
+    lon2 = radians(float(lon2))
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c
+
+def notifySeparation(route):
+    try:
+        driver = mongo.db.drivers.find({"ss_id": route.get('driver_id')})
+        result = push_service.notify_single_device(registration_id=driver.get("firebase_token"), message_title="Llevame",
+                                                   message_body={"type": "separationNotif", "content": "Acerquense muchachos."})
+    except:
+        logging.error('Separation notification failed for driver id: %s', driver['ss_id'])
+
+    try:
+        passenger = mongo.db.passengers.find({"ss_id": route.get('passeger_id')})
+        result = push_service.notify_single_device(registration_id=passenger.get("firebase_token"), message_title="Llevame",
+                                                   message_body={"type": "separationNotif", "content": "Acerquense muchachos."})
+    except:
+        logging.error('Separation notification failed for passenger id: %s', passenger.get('ss_id'))
+
+
+kmThread = threading.Thread(target=km)
+kmThread.start()
+
 
 ########################
 
@@ -686,12 +738,18 @@ class StartRoutesController(Resource):
     def post(self, route_id):
             route_to_start = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
             if route_to_start:
+                passenger = mongo.db.passengers.find_one({'ss_id': int(route_to_start.get('passenger_id'))})
+                driver = mongo.db.drivers.find_one({'ss_id': int(route_to_start.get('driver_id'))})
+                distance = calculateDistance(passenger.get("latitude"), passenger.get("longitude"), driver.get("latitude"), driver.get("longitude") )
+                if distance > ALLOWED_DISTANCE:
+                    return {'error': 'No se puede comenzar ruta, el pasajero y el conductor deben estar cerca.'}, 500, {
+                        'Content-type': 'application/json'}
+                #Actualizo la ruta una vez pasado el check de distancia
                 mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"status": "IN_PROGRESS", "initTimeStamp": datetime.datetime.now()}})
                 #notificacion firebase a passenger
-                passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_start.get('passenger_id'))}).get("firebase_token")
+                passenger_token = passenger.get("firebase_token")
                 route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
                 result = push_service.notify_single_device(registration_id=passenger_token, message_title="Llevame", message_body= {"type": "driverStartedRoute", "content": route_id})
-
                 return json.loads(dumps(route_to_request)), 200
             else:
                 return {'error': 'Internal server error, no route found.'}, 500, {'Content-type': 'application/json'}
