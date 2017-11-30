@@ -43,9 +43,27 @@ Con todo instalado, procedemos a levantar el servidor:
     export MONGO_URL=mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame
 
     gunicorn llevame:app
-    
+
 El servidor ahora se encontrará levantado en [localhost:8000].
 
 Si el puerto 8000 se encontrara ocupado por otro proceso, se deberá correr el siguiente comando para especificar en que puerto queremos levantarlo.
 
     gurnicorn --bind 0.0.0.0:XXXX llevame:app
+
+## Deploy a heroku ##
+
+Actualmente en heroku el servidor esta corriendo sobre docker. Para hacer un deployment, una vez en el directorio raiz del proyecto, utilizar los siguientes comandos:
+
+    heroku login
+    sudo heroku container:login
+    sudo heroku container:push web --app llevame-taller2
+
+## Correr tests##
+
+Para correr las pruebas, una vez en el directorio raiz del proyecto, utilizar los siguientes comandos:
+
+    export MONGO_URL=mongodb://root:qmsroot@ds147681.mlab.com:47681/llevame_test
+
+    export MODE=TESTING
+    
+    pytest tests --cov=llevame
