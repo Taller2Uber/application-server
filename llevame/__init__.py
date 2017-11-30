@@ -572,10 +572,11 @@ class DebtController(Resource):
 
             if ss_user.status_code == 200:
                 jlist = json.loads(ss_user.content).get("user").get("balance")
-                balance = None
-                for x in range(0, len(jlist)):
-                    if (jlist[x].get("currency")) == "ARS":
-                        balance = jlist[x].get("value")
+                balance = 0
+                if (jlist):
+                    for x in range(0, len(jlist)):
+                            if (jlist[x].get("currency")) == "ARS":
+                                balance = jlist[x].get("value")
 
                 methods = requests.get(ss_url + "/api/paymethods", headers={'token': app_token})
                 if methods.status_code == 200:
