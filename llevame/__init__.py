@@ -9,12 +9,16 @@ from flask_restplus import Resource, Api, fields
 from flask_pymongo import PyMongo
 from bson.objectid import ObjectId
 from sharedServer.ss_api import SharedServer
+from googleMaps.google_maps import GoogleMaps
 import sharedServer.ss_api
-from pyfcm import FCMNotification
+import googleMaps.google_maps
+#from pyfcm import FCMNotification
 import logging
 import datetime
 import jwt
 import json
+import threading
+import time
 
 # Configuracion de logs
 logging.basicConfig(filename='application.log', level=logging.ERROR, format='%(asctime)s %(message)s',
@@ -34,13 +38,11 @@ app.config['MONGO_URI'] = MONGO_URL
 mongo = PyMongo(app)
 
 # Configuraciones Shared Server
-with open('config.json') as data_file:
-    conf = json.load(data_file)
 app_token = sharedServer.ss_api.app_token
 ss_url = sharedServer.ss_api.ss_url
-google_token = conf["google_token"]
+google_token = googleMaps.google_maps.google_token
 
-push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
+#push_service = FCMNotification(api_key="AAAAc3lcLr8:APA91bEjf0y6NSLjfjvPmbDT0kyadEtyu3KK7TLZ9QHG97LpIr9mhdmuE1DHlzkF_8MzPjNJSwNCilfYBkUgoBkQJUBYssqzJMeI0KYBzR0UbgHbAdJxZWEH-dCGxRodFzQtEwjtdV5-")
 
 
 coordinates = api.model('Google coordinates', {
@@ -146,13 +148,6 @@ def decode_auth_token(auth_token):
     except jwt.InvalidTokenError:
         return 'Invalid token. Please log in again.'
 
-def get_cache(str):
-    var = cache.get(str)
-    if not var:
-        return "NOT_SET_YET"
-    return var
-
-
 def check_auth(ss_id):
     """This function is called to check if ss_id is valid.
     """
@@ -181,6 +176,21 @@ def requires_auth(f):
             return authenticate()
         return f(*args, **kwargs)
     return decorated
+
+########################
+
+def ping():
+    while True:
+        global app_token
+        ping_response = requests.post(ss_url + '/api/servers/ping', headers={'token': app_token})
+
+        if ping_response.status_code == 200:
+            app_token = json.loads(ping_response.content).get('token').get('token')
+        time.sleep(180)
+
+
+pingThread = threading.Thread(target=ping)
+pingThread.start()
 
 ########################
 
@@ -225,8 +235,10 @@ class DriversController(Resource):
                     first_name = fb_body.get('name')
                 else:
                     return fb_body, 400
+            elif user_name and password:
+                driver = drivers.find_one({'user_name': user_name})
             else:
-                driver = drivers.find_one({'user_name': user_name, 'password': password})
+                return {'error': 'Bad parameters.'}, 400, {'Content-type': 'application/json'}
             if not driver:
                 jsonBody={
                     'type': 'driver',
@@ -249,6 +261,7 @@ class DriversController(Resource):
                         '_ref': created_driver.get('_ref'),
                         'fb_id': fb_id,
                         'firebase_token': firebase_token,
+                        'user_name': created_driver.get('username'),
                         'first_name': created_driver.get('firstname'),
                         'last_name': created_driver.get('lastname'),
                         'email': created_driver.get('email'),
@@ -336,7 +349,7 @@ class CarsController(Resource):
                     }
                 ]
             }
-            ss_create_car = requests.post(ss_url + '/api/users/' + driver_id + '/cars', json=ss_body, headers={'token': app_token})
+            ss_create_car = SharedServer().createCar(driver_id, ss_body)
 
             if ss_create_car.status_code == 201:
                 db_driver['cars'].append({'brand': request.json.get('brand'),
@@ -383,10 +396,12 @@ class PassengersController(Resource):
                     passenger = passengers.find_one({'fb_id': fb_id})
                 else:
                     return fb_body, 400
+            elif user_name and password:
+                passenger = passengers.find_one({'user_name': user_name})
             else:
-                passenger = passengers.find_one({'user_name': user_name, 'password': password})
+                return {'error': 'Bad parameters.'}, 400, {'Content-type': 'application/json'}
             if not passenger:
-                ss_create_passenger = requests.post(ss_url + '/api/users', json={
+                jsonObject={
                     'type': 'passenger',
                     'username': user_name or 'default',
                     'password': password or 'default',
@@ -397,7 +412,8 @@ class PassengersController(Resource):
                     'country': request.json.get('country') or 'default',
                     'email': request.json.get('email') or 'default',
                     'birthdate': request.json.get('birthday') or '09-09-1970'
-                }, headers={'token': app_token})
+                }
+                ss_create_passenger = SharedServer().createUser(jsonObject)
                 if 201 == ss_create_passenger.status_code:
                     json_response = json.loads(ss_create_passenger.content)
                     created_passenger = json_response.get('user')
@@ -406,6 +422,7 @@ class PassengersController(Resource):
                         '_ref': created_passenger.get('_ref'),
                         'fb_id': fb_id,
                         'firebase_token': firebase_token,
+                        'user_name': created_passenger.get('username'),
                         'first_name': created_passenger.get('firstname'),
                         'last_name': created_passenger.get('lastname'),
                         'email': created_passenger.get('email'),
@@ -522,10 +539,10 @@ class RoutesController(Resource):
             start_coord = request.json.get('latitude_origin') + ',' + request.json.get('longitude_origin')
             end_coord = request.json.get('latitude_destination') + ',' + request.json.get('longitude_destination')
             if passenger_id and start_coord and end_coord:
-                google_routes = requests.get('https://maps.googleapis.com/maps/api/directions/json?origin=' + start_coord + '&destination=' + end_coord + '&alternatives=true&key=' + google_token)
+                google_routes = GoogleMaps().getRoutes(start_coord, end_coord)
                 response = json.loads(google_routes.content)
                 if google_routes.status_code == 200:
-                    ss_estimated_price = requests.post(ss_url + '/api/trips/estimate', json={
+                    jsonObject={
                               "passenger": passenger_id,
                               "start": {
                                 "address": {
@@ -547,12 +564,13 @@ class RoutesController(Resource):
                               "cost": {
                                 "currency": "ARS"
                               }
-                        }, headers={'token': app_token})
+                        }
+                    ss_estimated_price = SharedServer().estimatePrice(jsonObject)
                     if ss_estimated_price.status_code == 200:
                         response["estimated_price"] = json.loads(ss_estimated_price.content).get('cost').get('value')
                         return response, 200
                     elif ss_estimated_price.status_code == 402:
-                        user_payment = requests.get(ss_url + "/api/users/" + str(passenger_id), headers={'token': app_token})
+                        user_payment = SharedServer().getPaymentMethod(passenger_id)
                         if user_payment.status_code == 200:
                             jlist = json.loads(user_payment.content).get("user").get("balance")
                             balance = None
@@ -616,13 +634,14 @@ class RequestRoutesController(Resource):
     def post(self, route_id):
         driver_id = request.json.get('driver_id')
         if driver_id:
-            driver = mongo.db.drivers.find_one({'ss_id': driver_id})
+            driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
             if driver:
                 route_to_request = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
                 if route_to_request:
-                    mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"driver_id": driver_id, "status": "WAITING_ACCEPTANCE"}})
+                    mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"driver_id": int(driver_id), "status": "WAITING_ACCEPTANCE"}})
                     #notificacion firebase a passenger
                     passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
+                    print(passenger_token)
                     route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
 
 
@@ -799,10 +818,10 @@ class Notifs(Resource):
         #notificacion firebase a passenger
 
 
-        result = push_service.notify_single_device(registration_id="dFUsCR3KbKw:APA91bGCf9XOniAWV-MblDvnTvi_vYuLMBCquNnSCmfVWsTN3yM-lSeE_sxtBFfc92Bk2GI3PNA46eeAiFqAilh4h39BvK-fP20u7dekMSPHCHe-NmXhxVg8nuZVGA8lUjw5z9PcGFfF", message_title = "Llevame", message_body={"type":"no-chat","content": {"driver":"juan"}})
-
+        result = push_service.notify_single_device(registration_id="cF5EebuLvXg:APA91bFuGIrUaJ7g-11x4oXzX7Ycxh1NByrYdgIoPxdmZwtLf_aVppFnCdwOujWhSFXQeNlDx6WYm9ZBDySDMjtyM1JRMt7QBOxYIs4ySKeovaTHgE5b3qPxPJtLgAgmeG6VCnpGlfEC", message_title = "Llevame", message_body= {"type":"no-chat","content": "hola"})
+        print("result", result)
         return "notif", 200
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5000)
