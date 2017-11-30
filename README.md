@@ -1,4 +1,4 @@
-[![codecov](https://codecov.io/gh/Taller2Uber/application-server/branch/master/graph/badge.svg)](https://codecov.io/gh/Taller2Uber/application-server)
+[![Build Status](https://travis-ci.org/Taller2Uber/application-server.svg?branch=master)](https://travis-ci.org/Taller2Uber/application-server) [![codecov](https://codecov.io/gh/Taller2Uber/application-server/branch/master/graph/badge.svg)](https://codecov.io/gh/Taller2Uber/application-server)
 
 Application-Server
 ======================
@@ -39,6 +39,8 @@ Para levantar el servidor es necesario correr los siguientes comandos:
 Con todo instalado, procedemos a levantar el servidor:
 
     source llevame/bin/activate
+    
+    export MONGO_URL=mongodb://root:qmsroot@ds115124.mlab.com:15124/llevame
 
     gunicorn llevame:app
     
