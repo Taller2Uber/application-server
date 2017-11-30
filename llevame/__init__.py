@@ -353,8 +353,7 @@ class DriverController(Resource):
             db_driver = mongo.db.drivers.find_one({'ss_id': int(driver_id)})
             if not db_driver:
                 return {'error': 'Driver not found'}, 404, {'Content-type': 'application/json'}
-            if request.json.get('ss_id'):
-                del request.json['ss_id']
+            print("actualizando pasajero - ", request.json)
             mongo.db.drivers.update_one({'ss_id': int(driver_id)}, {'$set': request.get_json()})
             return json.loads(dumps(mongo.db.drivers.find_one({'ss_id': int(driver_id)}))), 200, {'Content-type': 'application/json'}
         except:
@@ -518,6 +517,7 @@ class PassengerController(Resource):
             db_passenger = mongo.db.passengers.find_one({'ss_id': int(passenger_id)})
             if not db_passenger:
                 return {'error': 'Passenger not found'}, 404, {'Content-type': 'application/json'}
+            print("actualizando pasajero - ", request.json)
             mongo.db.passengers.update_one({'ss_id': int(passenger_id)}, {'$set': request.get_json()})
             return json.loads(dumps(mongo.db.passengers.find_one({'ss_id': int(passenger_id)}))), 200, {'Content-type': 'application/json'}
         except:
@@ -743,6 +743,7 @@ class StartRoutesController(Resource):
                 if distance > ALLOWED_DISTANCE:
                     return {'error': 'No se puede comenzar ruta, el pasajero y el conductor deben estar cerca.'}, 500, {
                         'Content-type': 'application/json'}
+                mongo.db.drivers.update_one({'ss_id': int(route_to_start.get('driver_id'))}, {'$set': {"available": False}})
                 #Actualizo la ruta una vez pasado el check de distancia
                 mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"status": "IN_PROGRESS", "initTimeStamp": datetime.datetime.now()}})
                 #notificacion firebase a passenger
@@ -769,18 +770,18 @@ class SpecificRoutesController(Resource):
 class FinishRoutesController(Resource):
     @requires_auth
     def post(self, route_id):
-        route_to_request = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
-        if route_to_request:
+        route_to_finish = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
+        if route_to_finish:
             ss_trip = requests.post(ss_url + "/api/trips", headers={'token': app_token},
                                     json= {
                                             "trip": {
-                                                "driver": route_to_request.get("driver_id"),
-                                                "passenger": route_to_request.get("passenger_id"),
+                                                "driver": route_to_finish.get("driver_id"),
+                                                "passenger": route_to_finish.get("passenger_id"),
                                                 "start": {
                                                     "address": {
                                                         "location": {
-                                                            "lat": route_to_request.get("route").get("legs")[0].get("start_location").get("lat"),
-                                                            "lon": route_to_request.get("route").get("legs")[0].get("start_location").get("lng")
+                                                            "lat": route_to_finish.get("route").get("legs")[0].get("start_location").get("lat"),
+                                                            "lon": route_to_finish.get("route").get("legs")[0].get("start_location").get("lng")
                                                         }
                                                     },
                                                     "timestamp": 0
@@ -788,9 +789,9 @@ class FinishRoutesController(Resource):
                                                 "end": {
                                                     "address": {
                                                         "location": {
-                                                            "lat": route_to_request.get("route").get("legs")[0].get(
+                                                            "lat": route_to_finish.get("route").get("legs")[0].get(
                                                                 "end_location").get("lat"),
-                                                            "lon": route_to_request.get("route").get("legs")[0].get(
+                                                            "lon": route_to_finish.get("route").get("legs")[0].get(
                                                                 "end_location").get("lng")
                                                         }
                                                     },
@@ -800,7 +801,7 @@ class FinishRoutesController(Resource):
                                                 "totalTime": 0,
                                                 "waitTime": 0,
                                                 "totalTime": 0,
-                                                "distance": route_to_request.get("route").get("legs")[0].get("distance").get("value"),
+                                                "distance": route_to_finish.get("route").get("legs")[0].get("distance").get("value"),
                                                 "route": [
                                                     {
                                                         "location": {
@@ -817,9 +818,10 @@ class FinishRoutesController(Resource):
                                             "paymethod": {}
                                         })
             if ss_trip.status_code == 201:
-                mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"status": "FINISHED", "finishTimeStamp": datetime.datetime.now()}})
+                mongo.db.routes.update_one({"_id":  ObjectId(route_id)}, {'$set': {"status": "FINISHED", "finishTimeStamp": datetime.datetime.now()}})
+                mongo.db.drivers.update_one({'ss_id': int(route_to_finish.get('driver_id'))}, {'$set': {"available": True}})
                 #notificacion firebase a passenger
-                passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
+                passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_finish.get('passenger_id'))}).get("firebase_token")
                 result = push_service.notify_single_device(registration_id=passenger_token, message_title="Llevame", message_body= {"type": "driverFinishedRoute", "content": route_id})
                 return {'message': 'Viaje finalizado con exito.'}, 200
             else:
