@@ -76,3 +76,19 @@ class PassengersTestCase(unittest.TestCase):
         passengerToUpdate = json.dumps({'latitude': '25'})
         res = self.app.put('/api/v1/passengers/1', data=passengerToUpdate,headers={ 'authorization' : token.headers.get('authorization')}, content_type='application/json')
         self.assertEqual(res.status_code, 200)
+
+    def test_passenger_pay(self):
+        token = self.login()
+        toPay = json.dumps({'amount': 50})
+        trips_response = Mock(spec=Response)
+        trips_response.content = json.dumps({'trips': [{ 'id': 1}]})
+        trips_response.status_code = 200
+        SharedServer.getTrips = MagicMock(return_value=trips_response)
+
+        pay_response = Mock(spec=Response)
+        pay_response.content = json.dumps({'trips': [{ 'id': 1}]})
+        pay_response.status_code = 201
+        SharedServer.pay = MagicMock(return_value=pay_response)
+
+        res = self.app.post('/api/v1/users/1/pay', data=toPay,headers={ 'authorization' : token.headers.get('authorization')}, content_type='application/json')
+        self.assertEqual(res.status_code, 200)
