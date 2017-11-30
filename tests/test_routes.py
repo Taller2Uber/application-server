@@ -153,3 +153,35 @@ class RoutesTestCase(unittest.TestCase):
         res = self.app.get('/api/v1/routes/'+ str(route.get('_id')), headers={ 'authorization' : token.headers.get('authorization')})
         self.assertEqual(res.status_code, 200)
 
+    def test_finish_route(self):
+        route = {'from': 'corea', 'to': 'mongolia', 'passenger_id': 1, 'driver_id': 1}
+        with llevame.app.app_context():
+            llevame.mongo.db.routes.delete_many({})
+            llevame.mongo.db.routes.insert(route)
+            route = llevame.mongo.db.routes.find_one({'from': 'corea'})
+        body = json.dumps({'accepted': True})
+        fcm_response = Mock(spec=Response)
+        fcm_response.content = json.dumps({'allgood': 'yep'})
+        fcm_response.status_code = 200
+        FCM.sendNotification = MagicMock(return_value=fcm_response)
+        token = self.login()
+        res = self.app.post('/api/v1/routes/start/'+ str(route.get('_id')),data=body, headers={ 'authorization' : token.headers.get('authorization')}, content_type='application/json')
+        self.assertEqual(res.status_code, 200)
+
+    def test_finish_route(self):
+        token = self.login()
+        route = {'from': 'corea', 'to': 'mongolia', 'passenger_id': 1, 'driver_id': 1, 'route': {'legs': [{'start_location': {'lat': 0, 'long': 0},'end_location': {'lat': 0, 'long': 0},'distance': {'value': 15}}]}}
+        with llevame.app.app_context():
+            llevame.mongo.db.routes.delete_many({})
+            llevame.mongo.db.routes.insert(route)
+            route = llevame.mongo.db.routes.find_one({'from': 'corea'})
+        ss_response = Mock(spec=Response)
+        ss_response.content = json.dumps({'allgood': 'yep'})
+        ss_response.status_code = 201
+        SharedServer.createTrip = MagicMock(return_value=ss_response)
+        fcm_response = Mock(spec=Response)
+        fcm_response.content = json.dumps({'allgood': 'yep'})
+        fcm_response.status_code = 200
+        FCM.sendNotification = MagicMock(return_value=fcm_response)
+        res = self.app.post('/api/v1/routes/finish/' + str(route.get('_id')),  headers={ 'authorization' : token.headers.get('authorization')})
+        self.assertEqual(res.status_code, 200)

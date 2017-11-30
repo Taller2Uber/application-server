@@ -31,3 +31,12 @@ class SharedServer:
 
     def getPayMethods(self):
         return requests.get(ss_url + "/api/paymethods", headers={'token': app_token})
+
+    def pay(self, body, user_id):
+        return requests.post(ss_url + "/api/users/" + user_id + "/transactions", headers={'token': app_token}, json=body)
+
+    def getTrips(self, user_id):
+        return requests.get(ss_url + "/api/users/" + user_id + "/trips", headers={'token': app_token})
+
+    def createTrip(self, route):
+        return requests.post(ss_url + "/api/trips", headers={'token': app_token},json=route)

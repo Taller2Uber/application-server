@@ -773,51 +773,51 @@ class FinishRoutesController(Resource):
     def post(self, route_id):
         route_to_finish = mongo.db.routes.find_one({"_id" :  ObjectId(route_id)})
         if route_to_finish:
-            ss_trip = requests.post(ss_url + "/api/trips", headers={'token': app_token},
-                                    json= {
-                                            "trip": {
-                                                "driver": route_to_finish.get("driver_id"),
-                                                "passenger": route_to_finish.get("passenger_id"),
-                                                "start": {
-                                                    "address": {
-                                                        "location": {
-                                                            "lat": route_to_finish.get("route").get("legs")[0].get("start_location").get("lat"),
-                                                            "lon": route_to_finish.get("route").get("legs")[0].get("start_location").get("lng")
-                                                        }
-                                                    },
-                                                    "timestamp": 0
-                                                },
-                                                "end": {
-                                                    "address": {
-                                                        "location": {
-                                                            "lat": route_to_finish.get("route").get("legs")[0].get(
-                                                                "end_location").get("lat"),
-                                                            "lon": route_to_finish.get("route").get("legs")[0].get(
-                                                                "end_location").get("lng")
-                                                        }
-                                                    },
-                                                    "timestamp": 0
-                                                }
-                                                ,
-                                                "totalTime": 0,
-                                                "waitTime": 0,
-                                                "totalTime": 0,
-                                                "distance": route_to_finish.get("route").get("legs")[0].get("distance").get("value"),
-                                                "route": [
-                                                    {
-                                                        "location": {
-                                                            "lat": 0,
-                                                            "lon": 0
-                                                        },
-                                                        "timestamp": 0
-                                                    }
-                                                ],
-                                                "cost": {
-                                                    "currency": "ARS"
-                                                }
-                                            },
-                                            "paymethod": {}
-                                        })
+            jsonObject= {
+                        "trip": {
+                            "driver": route_to_finish.get("driver_id"),
+                            "passenger": route_to_finish.get("passenger_id"),
+                            "start": {
+                                "address": {
+                                    "location": {
+                                        "lat": route_to_finish.get("route").get("legs")[0].get("start_location").get("lat"),
+                                        "lon": route_to_finish.get("route").get("legs")[0].get("start_location").get("lng")
+                                    }
+                                },
+                                "timestamp": 0
+                            },
+                            "end": {
+                                "address": {
+                                    "location": {
+                                        "lat": route_to_finish.get("route").get("legs")[0].get(
+                                            "end_location").get("lat"),
+                                        "lon": route_to_finish.get("route").get("legs")[0].get(
+                                            "end_location").get("lng")
+                                    }
+                                },
+                                "timestamp": 0
+                            }
+                            ,
+                            "totalTime": 0,
+                            "waitTime": 0,
+                            "totalTime": 0,
+                            "distance": route_to_finish.get("route").get("legs")[0].get("distance").get("value"),
+                            "route": [
+                                {
+                                    "location": {
+                                        "lat": 0,
+                                        "lon": 0
+                                    },
+                                    "timestamp": 0
+                                }
+                            ],
+                            "cost": {
+                                "currency": "ARS"
+                            }
+                        },
+                        "paymethod": {}
+                    }
+            ss_trip = SharedServer().createTrip(jsonObject)
             if ss_trip.status_code == 201:
                 mongo.db.routes.update_one({"_id":  ObjectId(route_id)}, {'$set': {"status": "FINISHED", "finishTimeStamp": datetime.datetime.now()}})
                 mongo.db.drivers.update_one({'ss_id': int(route_to_finish.get('driver_id'))}, {'$set': {"available": True}})
@@ -839,12 +839,11 @@ class UsersPayController(Resource):
         driver = mongo.db.drivers.find_one({"ss_id": int(user_id)})
         if passenger or driver:
             amount_to_pay = request.json.get('amount')
-            users_trips = requests.get(ss_url + "/api/users/" + user_id + "/trips", headers={'token': app_token})
+            users_trips = SharedServer().getTrips(user_id)
             if users_trips.status_code == 200:
                 trips_list = json.loads(users_trips.content).get("trips")
                 trip_id = trips_list[len(trips_list)-1].get("id")
-                user_payment = requests.post(ss_url + "/api/users/" + user_id + "/transactions", headers={'token': app_token}, json=
-                {
+                jsonObject={
                     "trip": trip_id,
                     "timestamp": 0,
                     "cost": {
@@ -854,7 +853,8 @@ class UsersPayController(Resource):
                     "description": "pago",
                     "data": {},
                     "userid": user_id
-                })
+                }
+                user_payment = SharedServer().pay(jsonObject, user_id)
                 if user_payment.status_code == 201:
                     return {'message': 'Su pago se ha registrado con exito!'}, 200, {'Content-type': 'application/json'}
                 else:
