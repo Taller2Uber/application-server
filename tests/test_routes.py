@@ -114,7 +114,7 @@ class RoutesTestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
 
     def test_answer_request(self):
-        route = {'from': 'corea', 'to': 'mongolia', 'driver_id': 1}
+        route = {'from': 'corea', 'to': 'mongolia', 'driver_id': 1, 'passenger_id': 1}
         with llevame.app.app_context():
             llevame.mongo.db.routes.delete_many({})
             llevame.mongo.db.routes.insert(route)
