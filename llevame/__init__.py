@@ -852,28 +852,32 @@ class UsersPayController(Resource):
         driver = mongo.db.drivers.find_one({"ss_id": int(user_id)})
         if passenger or driver:
             amount_to_pay = request.json.get('amount')
-            users_trips = SharedServer().getTrips(user_id)
-            if users_trips.status_code == 200:
-                trips_list = json.loads(users_trips.content).get("trips")
-                trip_id = trips_list[len(trips_list)-1].get("id")
-                jsonObject={
-                    "trip": trip_id,
-                    "timestamp": 0,
-                    "cost": {
-                        "value": amount_to_pay,
-                        "currency": "ARS"
-                    },
-                    "description": "pago",
-                    "data": {},
-                    "userid": user_id
-                }
-                user_payment = SharedServer().pay(jsonObject, user_id)
-                if user_payment.status_code == 201:
-                    return {'message': 'Su pago se ha registrado con exito!'}, 200, {'Content-type': 'application/json'}
+            pay_method =  request.json.get('paymethod')
+            if pay_method and amount_to_pay:
+                users_trips = SharedServer().getTrips(user_id)
+                if users_trips.status_code == 200:
+                    trips_list = json.loads(users_trips.content).get("trips")
+                    trip_id = trips_list[len(trips_list)-1].get("id")
+                    jsonObject={
+                        "trip": trip_id,
+                        "timestamp": 0,
+                        "cost": {
+                            "value": amount_to_pay,
+                            "currency": "ARS"
+                        },
+                        "description": "pago",
+                        "data": pay_method,
+                        "userid": user_id
+                    }
+                    user_payment = SharedServer().pay(jsonObject, user_id)
+                    if user_payment.status_code == 201:
+                        return {'message': 'Su pago se ha registrado con exito!'}, 200, {'Content-type': 'application/json'}
+                    else:
+                        return {'error': 'Su pago no se pudo registrar con exito.'}, 500, {'Content-type': 'application/json'}
                 else:
-                    return {'error': 'Su pago no se pudo registrar con exito.'}, 500, {'Content-type': 'application/json'}
+                    return {'error': 'Bad Request, amount parameter needed.'}, 400, {'Content-type': 'application/json'}
             else:
-                return {'error': 'Bad Request, amount parameter needed.'}, 400, {'Content-type': 'application/json'}
+                return {'error': 'Bad Request, amount and paymethod fields required.'}, 400, {'Content-type': 'application/json'}
         else:
             return {'error': 'Bad Request, user_id invalid.'}, 400, {'Content-type': 'application/json'}
 
