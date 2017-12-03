@@ -79,7 +79,7 @@ class PassengersTestCase(unittest.TestCase):
 
     def test_passenger_pay(self):
         token = self.login()
-        toPay = json.dumps({'amount': 50})
+        toPay = json.dumps({'amount': 50, 'paymethod': {}})
         trips_response = Mock(spec=Response)
         trips_response.content = json.dumps({'trips': [{ 'id': 1}]})
         trips_response.status_code = 200
