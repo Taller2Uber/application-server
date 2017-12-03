@@ -322,6 +322,8 @@ class DriversController(Resource):
                         'latitude': request.json.get('latitude'),
                         'longitude': request.json.get('longitude'),
                         'birthday': created_driver.get('birthdate'),
+                        'state': "no_route",
+                        'actual_route': None,
                         'cars': [],
                         'available': True}
                     drivers.insert(driver_to_insert)
@@ -481,7 +483,9 @@ class PassengersController(Resource):
                         'gender': created_passenger.get('gender'),
                         'latitude': request.json.get('latitude'),
                         'longitude': request.json.get('longitude'),
-                        'birthday': created_passenger.get('birthdate')
+                        'birthday': created_passenger.get('birthdate'),
+                        "state": "no_route",
+                        "actual_route": None
                         }
                     passengers.insert(passenger_to_insert)
                     return json.loads(dumps(passenger_to_insert)), ss_create_passenger.status_code, {
@@ -658,7 +662,8 @@ class ConfirmRoutesController(Resource):
             passenger_id = request.json.get('passenger_id')
             if route and passenger_id:
                 route_to_insert = {"route": route, "passenger_id": passenger_id, "driver_id": None, "status": "PENDING", "initTimeStamp": "", "finishTimeStamp": ""}
-                mongo.db.routes.insert(route_to_insert)
+                _id = mongo.db.routes.insert(route_to_insert)
+                mongo.db.passengers.update_one({'ss_id': int(passenger_id)}, {'$set': {"state": "waiting", "actual_route": str(_id)}})
                 return json.loads(dumps(route_to_insert)), 200
             else:
                 return {'error': 'Bad parameters, passenger_id and route needed'}, 400, {'Content-type': 'application/json'}
@@ -692,8 +697,8 @@ class RequestRoutesController(Resource):
                     #notificacion firebase a passenger
                     passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_request.get('passenger_id'))}).get("firebase_token")
                     route_to_request = mongo.db.routes.find_one({"_id": ObjectId(route_id)})
-
-
+                    mongo.db.drivers.update_one({'ss_id': int(driver_id)},
+                                                   {'$set': {"state": "waiting", "actual_route": route_id}})
                     result = FCM().sendNotification(passenger_token, route_id, "driverConfirmedRoute")
 
                     return json.loads(dumps(route_to_request)), 200
@@ -716,11 +721,17 @@ class AnswerRoutesRequestController(Resource):
                 if driver and passenger:
                     if accepted:
                         mongo.db.routes.update_one({"_id": ObjectId(route_id)}, {'$set': {"driver_id": route_to_request.get('driver_id'), "status": "ACCEPTED"}})
+                        mongo.db.drivers.update_one({'ss_id': int(route_to_request.get('driver_id'))},
+                                                    {'$set': {"state": "in_route", "actual_route": route_id}})
+                        mongo.db.passengers.update_one({'ss_id': int(route_to_request.get('passenger_id'))},
+                                                       {'$set': {"state": "in_route"}})
                         #notificacion firebase a passenger
                         result = FCM().sendNotification(driver.get('firebase_token'), route_id, "passengerConfirmedDriver") 
                         return {'message': 'Ruta confirmada con exito, aguarde al chofer.'}, 200, {'Content-type': 'application/json'}
                     else:
                         mongo.db.routes.update_one({"_id": ObjectId(route_id)}, {'$set': {"driver_id": None, "status": "PENDING"}})
+                        mongo.db.drivers.update_one({'ss_id': int(route_to_request.get('driver_id'))},
+                                                    {'$set': {"state": "no_route", "actual_route": None}})
                         result = FCM().sendNotification(driver.get('firebase_token'), route_id, "passengerRejectedDriver")
                         return {'message': 'Ruta rechazada con exito, aguarde a que otro chofer elija esta ruta.'}, 200, {'Content-type': 'application/json'}
                     return {'error': 'Not route found with those passenger and driver id.'}, 400, {'Content-type': 'application/json'}
@@ -742,7 +753,8 @@ class StartRoutesController(Resource):
                 if distance > ALLOWED_DISTANCE:
                     return {'error': 'No se puede comenzar ruta, el pasajero y el conductor deben estar cerca.'}, 500, {
                         'Content-type': 'application/json'}
-                mongo.db.drivers.update_one({'ss_id': int(route_to_start.get('driver_id'))}, {'$set': {"available": False}})
+                mongo.db.drivers.update_one({'ss_id': int(route_to_start.get('driver_id'))}, {'$set': {"available": False, "state": "started_route"}})
+                mongo.db.passengers.update_one({'ss_id': int(route_to_start.get('passenger_id'))}, {'$set': {"state": "started_route"}})
                 #Actualizo la ruta una vez pasado el check de distancia
                 mongo.db.routes.update_one({"_id" :  ObjectId(route_id)}, {'$set': {"status": "IN_PROGRESS", "initTimeStamp": datetime.datetime.now()}})
                 #notificacion firebase a passenger
@@ -820,7 +832,8 @@ class FinishRoutesController(Resource):
             ss_trip = SharedServer().createTrip(jsonObject)
             if ss_trip.status_code == 201:
                 mongo.db.routes.update_one({"_id":  ObjectId(route_id)}, {'$set': {"status": "FINISHED", "finishTimeStamp": datetime.datetime.now()}})
-                mongo.db.drivers.update_one({'ss_id': int(route_to_finish.get('driver_id'))}, {'$set': {"available": True}})
+                mongo.db.drivers.update_one({'ss_id': int(route_to_finish.get('driver_id'))}, {'$set': {"available": True, "state": "no_route", "actual_route": None}})
+                mongo.db.passengers.update_one({'ss_id': int(route_to_finish.get('passenger_id'))}, {'$set': {"state": "no_route", "actual_route": None}})
                 #notificacion firebase a passenger
                 passenger_token = mongo.db.passengers.find_one({'ss_id': int(route_to_finish.get('passenger_id'))}).get("firebase_token")
                 result = FCM().sendNotification(passenger_token, route_id, "driverFinishedRoute")
