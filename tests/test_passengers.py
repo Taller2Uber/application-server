@@ -79,7 +79,16 @@ class PassengersTestCase(unittest.TestCase):
 
     def test_passenger_pay(self):
         token = self.login()
-        toPay = json.dumps({'amount': 50, 'paymethod': {}})
+        toPay = json.dumps({'amount': 50, "paymethod": {
+            "paymethod": "visa",
+            "parameters": {
+                "expiration_month": "06",
+                "ccvv": "432",
+                "type": "credito",
+                "number": "4924023502452349023",
+                "expiration_year": "18"
+            }
+        }})
         trips_response = Mock(spec=Response)
         trips_response.content = json.dumps({'trips': [{ 'id': 1}]})
         trips_response.status_code = 200
