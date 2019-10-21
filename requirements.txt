@@ -42,5 +42,5 @@ status==0.2.5
 travis==0.0.3
 typing==3.6.2
 urllib3==1.22
-Werkzeug==0.12.2
+Werkzeug==0.15.3
 WTForms==2.1
