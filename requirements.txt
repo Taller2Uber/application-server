@@ -41,6 +41,6 @@ sphinxcontrib-websupport==1.0.1
 status==0.2.5
 travis==0.0.3
 typing==3.6.2
-urllib3==1.22
+urllib3==1.26.5
 Werkzeug==0.12.2
 WTForms==2.1
